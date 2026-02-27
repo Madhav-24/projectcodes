@@ -1,54 +1,78 @@
 param(
-    [string]$RepoPath = "$(Split-Path -Parent $MyInvocation.MyCommand.Definition)",
+    [string]$RepoPath = (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Definition)),
     [int]$DebounceSeconds = 60
 )
 
 Set-Location $RepoPath
 
-# verify git repo; init if missing
+# Verify git repo; init if missing
 git rev-parse --is-inside-work-tree > $null 2>&1
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "No git repo found at $RepoPath — initializing..."
+    Write-Host "No git repo found at $RepoPath - initializing..."
     git init
 }
 
-$watcher = New-Object System.IO.FileSystemWatcher $RepoPath -Property @{ 
-    IncludeSubdirectories = $true
-    NotifyFilter = [System.IO.NotifyFilters]'FileName, LastWrite, LastAccess, Size, DirectoryName'
-    Filter = '*.*'
-}
+$watcher = New-Object System.IO.FileSystemWatcher
+$watcher.Path = $RepoPath
+$watcher.IncludeSubdirectories = $true
+$watcher.NotifyFilter = [System.IO.NotifyFilters]::FileName -bor `
+                        [System.IO.NotifyFilters]::LastWrite -bor `
+                        [System.IO.NotifyFilters]::DirectoryName
+$watcher.Filter = '*.*'
 
-$timer = $null
+$script:timer = $null
 $debounceMs = $DebounceSeconds * 1000
 
-$commitAndPush = {
+function Invoke-CommitAndPush {
     Set-Location $RepoPath
     $status = git status --porcelain
     if (-not [string]::IsNullOrWhiteSpace($status)) {
         git add -A
-        git commit -m ("Auto update: {0}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) 2>$null
-        # Attempt push; if remote isn't set this will fail silently
-        git push 2>$null
+        $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+        git commit -m "Auto update: $timestamp"
+        git push
         Write-Host "Auto-pushed at $(Get-Date -Format 'HH:mm:ss')"
+    } else {
+        Write-Host "No changes detected at $(Get-Date -Format 'HH:mm:ss')"
     }
 }
 
-$onChange = {
-    if ($timer) { $timer.Stop(); $timer.Dispose() }
-    $timer = New-Object System.Timers.Timer $debounceMs
-    $timer.AutoReset = $false
-    $timer.add_Elapsed({ $commitAndPush.Invoke() ; $timer.Dispose() })
-    $timer.Start()
+$action = {
+    if ($script:timer) {
+        $script:timer.Stop()
+        $script:timer.Dispose()
+        $script:timer = $null
+    }
+    $script:timer = New-Object System.Timers.Timer
+    $script:timer.Interval = $debounceMs
+    $script:timer.AutoReset = $false
+    $script:timer.add_Elapsed({
+        Invoke-CommitAndPush
+        $script:timer.Dispose()
+        $script:timer = $null
+    })
+    $script:timer.Start()
 }
 
-# Register events
-Register-ObjectEvent $watcher Changed -Action $onChange | Out-Null
-Register-ObjectEvent $watcher Created -Action $onChange | Out-Null
-Register-ObjectEvent $watcher Deleted -Action $onChange | Out-Null
-Register-ObjectEvent $watcher Renamed -Action $onChange | Out-Null
+Register-ObjectEvent $watcher Changed -Action $action | Out-Null
+Register-ObjectEvent $watcher Created -Action $action | Out-Null
+Register-ObjectEvent $watcher Deleted -Action $action | Out-Null
+Register-ObjectEvent $watcher Renamed -Action $action | Out-Null
 
 $watcher.EnableRaisingEvents = $true
-Write-Host "Watching $RepoPath — changes will be committed/pushed after $DebounceSeconds s of inactivity. Ctrl-C to stop."
 
-# Keep the script alive
-while ($true) { Start-Sleep -Seconds 3600 }
+Write-Host "======================================================"
+Write-Host " Auto-Push Watcher Started"
+Write-Host " Repo   : $RepoPath"
+Write-Host " Debounce: $DebounceSeconds seconds"
+Write-Host " Press Ctrl+C to stop."
+Write-Host "======================================================"
+
+# Keep the script alive indefinitely
+try {
+    while ($true) { Start-Sleep -Seconds 10 }
+} finally {
+    $watcher.EnableRaisingEvents = $false
+    $watcher.Dispose()
+    Write-Host "Watcher stopped."
+}
