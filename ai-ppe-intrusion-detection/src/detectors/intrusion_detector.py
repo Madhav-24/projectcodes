@@ -1,23 +1,98 @@
-class IntrusionDetector:
-    def __init__(self, model):
-        self.model = model
+import numpy as np
+from src.detectors.ppe_detector import PPEDetector
 
-    def classify(self, detections):
+
+class IntrusionDetector:
+    """
+    Combines person detection + PPE detection to classify each detected
+    person as a Worker (compliant) or Intruder (non-compliant).
+
+    Classification rules (configurable):
+        Worker   → helmet AND vest detected near the person
+        Intruder → one or both PPE items missing
+    """
+
+    WORKER   = 'Worker'
+    INTRUDER = 'Intruder'
+
+    def __init__(self, ppe_detector: PPEDetector,
+                 require_helmet: bool = True,
+                 require_vest: bool = True):
+        """
+        Args:
+            ppe_detector:   An initialized PPEDetector instance.
+            require_helmet: If True, helmet is required to be a Worker.
+            require_vest:   If True, vest is required to be a Worker.
+        """
+        self.ppe_detector   = ppe_detector
+        self.require_helmet = require_helmet
+        self.require_vest   = require_vest
+
+    # ------------------------------------------------------------------
+    def process_frame(self, frame: np.ndarray) -> list[dict]:
+        """
+        Full pipeline: detect all objects, then classify each person.
+
+        Args:
+            frame: BGR numpy array (from OpenCV).
+
+        Returns:
+            List of result dicts, one per detected person:
+            {
+                'person':     detection dict (bbox, confidence),
+                'ppe':        {'helmet': bool, 'vest': bool},
+                'label':      'Worker' | 'Intruder',
+                'missing_ppe': list of missing items e.g. ['Helmet']
+            }
+        """
+        detections = self.ppe_detector.detect(frame)
+        persons    = self.ppe_detector.get_persons(detections)
+        ppe_items  = self.ppe_detector.get_ppe(detections)
+
         results = []
-        for detection in detections:
-            # Placeholder for classification logic
-            # This should include logic to check PPE compliance
-            if self.is_worker(detection):
-                results.append((detection, 'worker'))
-            else:
-                results.append((detection, 'intruder'))
+        for person in persons:
+            ppe_status = self.ppe_detector.check_ppe_for_person(person, ppe_items)
+            label, missing = self._classify(ppe_status)
+            results.append({
+                'person':      person,
+                'ppe':         ppe_status,
+                'label':       label,
+                'missing_ppe': missing
+            })
         return results
 
-    def is_worker(self, detection):
-        # Placeholder for actual PPE compliance check
-        return True  # Replace with actual logic
+    # ------------------------------------------------------------------
+    def _classify(self, ppe_status: dict) -> tuple[str, list[str]]:
+        """
+        Classify a person based on PPE status.
 
-    def process_frame(self, frame):
-        # Placeholder for frame processing logic
-        detections = self.model.detect(frame)
-        return self.classify(detections)
+        Returns:
+            (label, missing_items)
+        """
+        missing = []
+        if self.require_helmet and not ppe_status['helmet']:
+            missing.append('Helmet')
+        if self.require_vest and not ppe_status['vest']:
+            missing.append('Vest')
+
+        label = self.WORKER if len(missing) == 0 else self.INTRUDER
+        return label, missing
+
+    # ------------------------------------------------------------------
+    def classify(self, detections: list[dict]) -> list[tuple]:
+        """
+        Legacy-compatible method: classify a pre-computed list of
+        person detections (no frame needed).
+
+        Args:
+            detections: list of person detection dicts with 'ppe' key,
+                        OR plain person dicts (will default to Intruder).
+        Returns:
+            list of (detection, label) tuples.
+        """
+        results = []
+        for det in detections:
+            ppe_status = det.get('ppe', {'helmet': False, 'vest': False})
+            label, _   = self._classify(ppe_status)
+            results.append((det, label))
+        return results

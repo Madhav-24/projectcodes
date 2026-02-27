@@ -1,25 +1,38 @@
 model:
-  name: "yolo_v5"
-  weights: "path/to/weights/yolo_v5_weights.pt"
-  confidence_threshold: 0.5
-  nms_threshold: 0.4
+  name: "yolov8"
+  weights: "yolov8n.pt"               # auto-downloads if not present
+  custom_weights: ""                   # set to your trained .pt path when ready
+  confidence_threshold: 0.4
+  nms_threshold: 0.45
+  device: "cpu"                        # set to "cuda" if GPU available
+  image_size: 640
+
+classes:
+  names: ['Helmet', 'Person', 'Vest', 'objects']
+  person_id: 1                         # index of 'Person' in names list
+  helmet_id: 0                         # index of 'Helmet'
+  vest_id: 2                           # index of 'Vest'
 
 detection:
-  ppe_detection:
+  ppe:
     helmet_required: true
     vest_required: true
-  intrusion_detection:
-    worker_label: "worker"
-    intruder_label: "intruder"
+    min_person_confidence: 0.4
+    min_ppe_confidence: 0.35
+  intrusion:
+    worker_label: "Worker"
+    intruder_label: "Intruder"
 
 data:
-  input_source: "data/raw"
+  yaml: "data/raw/data.yaml"
+  train: "data/raw/train/images"
+  valid: "data/raw/valid/images"
+  test: "data/raw/test/images"
   output_results: "data/processed/results"
-  batch_size: 16
   image_size: [640, 640]
 
 training:
   epochs: 50
+  batch_size: 16
   learning_rate: 0.001
   optimizer: "adam"
-  loss_function: "cross_entropy"

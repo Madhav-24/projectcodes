@@ -1,46 +1,89 @@
+"""
+train.py - Train YOLOv8 on the PPE / construction dataset.
+
+Usage:
+    python scripts/train.py
+    python scripts/train.py --epochs 50 --batch 16
+    python scripts/train.py --epochs 100 --batch 8 --model yolov8s.pt
+    python scripts/train.py --resume   (resume last interrupted run)
+
+Trained weights will be saved to:
+    runs/detect/runs/train/ppe_model/weights/best.pt
+    runs/detect/runs/train/ppe_model/weights/last.pt
+"""
+
+import argparse
 import os
-import yaml
-import torch
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
-from src.datasets.loader import DataLoader as CustomDataLoader
-from src.models.pytorch_model import PyTorchModel
-from src.utils.dataset_utils import split_data
-from src.utils.transforms import preprocess_image
+import sys
 
-def load_config(config_path):
-    with open(config_path, 'r') as file:
-        config = yaml.safe_load(file)
-    return config
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-def train_model(config):
-    # Load dataset
-    dataset = CustomDataLoader(config['data']['path'])
-    train_loader, val_loader = split_data(dataset, config['training']['split_ratio'])
+from ultralytics import YOLO
 
-    # Initialize model
-    model = PyTorchModel(config['model'])
-    model.train()
+# ── Default paths ────────────────────────────────────────────────────────────
+ROOT      = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+DATA_YAML = os.path.join(ROOT, 'data', 'raw', 'data.yaml')
+PROJECT   = os.path.join(ROOT, 'runs', 'detect', 'runs', 'train')
+RUN_NAME  = 'ppe_model'
 
-    # Define loss function and optimizer
-    criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['learning_rate'])
 
-    # Training loop
-    for epoch in range(config['training']['num_epochs']):
-        for images, labels in train_loader:
-            images = preprocess_image(images)
-            optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+def parse_args():
+    parser = argparse.ArgumentParser(description='Train YOLOv8 PPE detector')
+    parser.add_argument('--data',    type=str,   default=DATA_YAML,  help='Path to data.yaml')
+    parser.add_argument('--model',   type=str,   default='yolov8n.pt',
+                        help='Base model: yolov8n.pt | yolov8s.pt | yolov8m.pt')
+    parser.add_argument('--epochs',  type=int,   default=50,         help='Number of epochs')
+    parser.add_argument('--batch',   type=int,   default=8,          help='Batch size')
+    parser.add_argument('--imgsz',   type=int,   default=640,        help='Image size')
+    parser.add_argument('--device',  type=str,   default='cpu',      help='cpu or 0 (GPU)')
+    parser.add_argument('--resume',  action='store_true',            help='Resume last run')
+    parser.add_argument('--name',    type=str,   default=RUN_NAME,   help='Run folder name')
+    return parser.parse_args()
 
-        print(f'Epoch [{epoch+1}/{config["training"]["num_epochs"]}], Loss: {loss.item():.4f}')
 
-    # Save the trained model
-    torch.save(model.state_dict(), config['model']['save_path'])
+def main():
+    args = parse_args()
 
-if __name__ == "__main__":
-    config = load_config(os.path.join(os.path.dirname(__file__), '../configs/default.yaml'))
-    train_model(config)
+    print("=" * 60)
+    print(f"  YOLOv8 PPE Training")
+    print(f"  Base model : {args.model}")
+    print(f"  Dataset    : {args.data}")
+    print(f"  Epochs     : {args.epochs}")
+    print(f"  Batch size : {args.batch}")
+    print(f"  Image size : {args.imgsz}")
+    print(f"  Device     : {args.device}")
+    print("=" * 60)
+
+    if args.resume:
+        last_pt = os.path.join(PROJECT, args.name, 'weights', 'last.pt')
+        if not os.path.exists(last_pt):
+            print(f"[ERROR] No checkpoint to resume at: {last_pt}")
+            sys.exit(1)
+        model = YOLO(last_pt)
+        print(f"[INFO] Resuming from {last_pt}")
+        model.train(resume=True)
+    else:
+        model = YOLO(args.model)
+        model.train(
+            data     = args.data,
+            epochs   = args.epochs,
+            imgsz    = args.imgsz,
+            batch    = args.batch,
+            device   = args.device,
+            project  = PROJECT,
+            name     = args.name,
+            exist_ok = True,       # overwrite existing run folder
+        )
+
+    best_pt = os.path.join(PROJECT, args.name, 'weights', 'best.pt')
+    print("\n" + "=" * 60)
+    print(f"  Training complete!")
+    print(f"  Best weights : {best_pt}")
+    print(f"\n  Run inference with:")
+    print(f"  python scripts/infer.py --source data/raw/test/images \\")
+    print(f"      --weights \"{best_pt}\" --save --conf 0.35")
+    print("=" * 60)
+
+
+if __name__ == '__main__':
+    main()
