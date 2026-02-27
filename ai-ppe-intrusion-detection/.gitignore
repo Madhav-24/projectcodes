@@ -22,6 +22,13 @@ data/
 data_raw/
 data_processed/
 
+# Training runs (charts, weights, batch images)
+runs/
+
+# Sample/output images
+images/
+data/processed/results/
+
 # VS Code
 .vscode/
 
