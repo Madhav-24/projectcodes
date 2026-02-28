@@ -30,24 +30,28 @@ def parse_args():
     parser.add_argument('--weights',        type=str, default='runs/detect/runs/train/ppe_model/weights/best.pt',
                         help='Custom PPE model weights')
     parser.add_argument('--person-weights', type=str, default='yolo11n.pt',
-                        help='Pretrained YOLO weights for person detection (COCO)')
-    parser.add_argument('--conf',    type=float, default=0.35)
+                        help='Pretrained YOLO weights for person detection (COCO, default: yolo11n.pt)')
+    parser.add_argument('--person-conf', type=float, default=0.15,
+                        help='Confidence threshold for person detection (lower = more recall)')
+    parser.add_argument('--conf',    type=float, default=0.25)
     parser.add_argument('--iou',     type=float, default=0.45)
     parser.add_argument('--device',  type=str, default='cpu')
     parser.add_argument('--imgsz',   type=int, default=640)
     parser.add_argument('--save',    action='store_true')
     parser.add_argument('--log',     action='store_true')
-    parser.add_argument('--no-helmet', action='store_false', dest='require_helmet')
-    parser.add_argument('--no-vest',   action='store_false', dest='require_vest')
-    parser.set_defaults(require_helmet=True, require_vest=True)
+    parser.add_argument('--no-helmet',   action='store_false', dest='require_helmet')
+    parser.add_argument('--require-vest', action='store_true',  dest='require_vest',
+                        help='Also require vest for Worker classification (disabled by default: vest model generalizes poorly)')
+    parser.set_defaults(require_helmet=True, require_vest=False)
     return parser.parse_args()
 
 
 def build_pipeline(args):
     detector = PPEDetector(
         weights=args.weights,
-        person_weights=args.person_weights,  # pretrained COCO for person detection
+        person_weights=args.person_weights,  # pretrained COCO (large) for person detection
         conf_threshold=args.conf,
+        person_conf=args.person_conf,        # lower threshold for max recall
         nms_threshold=args.iou,
         device=args.device,
         image_size=args.imgsz

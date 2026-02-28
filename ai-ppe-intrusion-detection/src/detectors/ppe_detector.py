@@ -29,6 +29,7 @@ class PPEDetector:
     def __init__(self, weights: str = 'yolo11n.pt',
                  person_weights: str = 'yolo11n.pt',
                  conf_threshold: float = 0.35,
+                 person_conf: float = 0.15,
                  nms_threshold: float = 0.45,
                  device: str = 'cpu',
                  image_size: int = 640):
@@ -36,23 +37,26 @@ class PPEDetector:
         Args:
             weights:        Path to custom PPE .pt weights file.
             person_weights: Pretrained YOLO weights for person detection (COCO).
-                            If same as weights, a single model is used.
-            conf_threshold: Minimum confidence to keep a detection.
+                            Use a larger model (e.g. yolo11l.pt) for better recall.
+            conf_threshold: Minimum confidence for PPE detections.
+            person_conf:    Lower confidence threshold for person detection
+                            (higher recall — don't miss workers).
             nms_threshold:  IoU threshold for Non-Maximum Suppression.
             device:         'cpu' or 'cuda'.
             image_size:     Inference image size.
         """
-        self.conf   = conf_threshold
-        self.iou    = nms_threshold
-        self.device = device
-        self.imgsz  = image_size
-        self.model  = YOLO(weights)
+        self.conf        = conf_threshold
+        self.person_conf = person_conf
+        self.iou         = nms_threshold
+        self.device      = device
+        self.imgsz       = image_size
+        self.model       = YOLO(weights)
         # Use a separate pretrained COCO model for robust person detection
         if person_weights == weights:
-            self.person_model = self.model
+            self.person_model    = self.model
             self.use_coco_person = False
         else:
-            self.person_model = YOLO(person_weights)
+            self.person_model    = YOLO(person_weights)
             self.use_coco_person = True
 
     # ------------------------------------------------------------------
@@ -97,18 +101,26 @@ class PPEDetector:
     def detect_persons(self, frame: np.ndarray) -> list[dict]:
         """
         Detect persons using the dedicated person model.
-        Uses COCO pretrained YOLO (class 0 = person) for best accuracy.
+        Uses a lower confidence threshold for maximum recall.
+        When using COCO pretrained model, restricts to class 0 (person) only.
         """
-        results = self.person_model.predict(
-            source=frame, conf=self.conf, iou=self.iou,
-            device=self.device, imgsz=self.imgsz, verbose=False
+        predict_kwargs = dict(
+            source=frame,
+            conf=self.person_conf,  # lower threshold — catch more people
+            iou=self.iou,
+            device=self.device,
+            imgsz=self.imgsz,
+            verbose=False,
         )
+        if self.use_coco_person:
+            # Only detect class 0 (person) — faster and avoids false positives
+            predict_kwargs['classes'] = [self.COCO_PERSON_ID]
+
+        results = self.person_model.predict(**predict_kwargs)
         persons = []
         for r in results:
             for box in r.boxes:
                 cls_id = int(box.cls[0])
-                # COCO pretrained: class 0 = person
-                # Custom model: class 4 = Person
                 if (self.use_coco_person and cls_id == self.COCO_PERSON_ID) or \
                    (not self.use_coco_person and cls_id == self.PERSON_ID):
                     x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
