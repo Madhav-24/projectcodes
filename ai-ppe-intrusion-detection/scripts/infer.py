@@ -31,7 +31,7 @@ def parse_args():
                         help='Custom PPE model weights')
     parser.add_argument('--person-weights', type=str, default='yolo11n.pt',
                         help='Pretrained YOLO weights for person detection (COCO, default: yolo11n.pt)')
-    parser.add_argument('--person-conf', type=float, default=0.15,
+    parser.add_argument('--person-conf', type=float, default=0.10,
                         help='Confidence threshold for person detection (lower = more recall)')
     parser.add_argument('--conf',    type=float, default=0.25)
     parser.add_argument('--iou',     type=float, default=0.45)
@@ -39,6 +39,8 @@ def parse_args():
     parser.add_argument('--imgsz',   type=int, default=640)
     parser.add_argument('--save',    action='store_true')
     parser.add_argument('--log',     action='store_true')
+    parser.add_argument('--no-show', action='store_true', dest='no_show',
+                        help='Skip cv2.imshow; open saved image with default viewer instead')
     parser.add_argument('--no-helmet', action='store_false', dest='require_helmet')
     parser.add_argument('--no-vest',   action='store_false', dest='require_vest')
     parser.set_defaults(require_helmet=True, require_vest=False)
@@ -134,7 +136,13 @@ def main():
     if str(source).isdigit():
         run_on_video(source, classifier, args, out_dir)
     elif ext in IMAGE_EXTS:
-        run_on_image(source, classifier, args, out_dir)
+        show = not args.no_show
+        run_on_image(source, classifier, args, out_dir, show=show)
+        if args.no_show and args.save:
+            import subprocess
+            out_path = os.path.join(out_dir, 'img_' + os.path.basename(source))
+            if os.path.exists(out_path):
+                subprocess.Popen(['explorer', out_path])
     elif ext in VIDEO_EXTS:
         run_on_video(source, classifier, args, out_dir)
     elif os.path.isdir(source):

@@ -40,11 +40,16 @@ def main():
 
         cv2.imshow(win, img)
 
-        # Check if window was closed by user
-        if cv2.getWindowProperty(win, cv2.WND_PROP_VISIBLE) < 1:
-            break
+        # Poll until a real key is pressed or the window is closed
+        while True:
+            key = cv2.waitKey(100)   # 100 ms poll
+            # Window closed via X button
+            if cv2.getWindowProperty(win, cv2.WND_PROP_VISIBLE) < 1:
+                key = 27
+                break
+            if key != -1:
+                break
 
-        key = cv2.waitKey(0)
         if key in (ord('q'), ord('Q'), 27):   # Q or Esc → quit
             break
         # Any other key → next image

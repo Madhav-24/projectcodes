@@ -29,7 +29,7 @@ class PPEDetector:
     def __init__(self, weights: str = 'yolo11n.pt',
                  person_weights: str = 'yolo11n.pt',
                  conf_threshold: float = 0.35,
-                 person_conf: float = 0.15,
+                 person_conf: float = 0.10,
                  nms_threshold: float = 0.45,
                  device: str = 'cpu',
                  image_size: int = 640):
@@ -143,13 +143,24 @@ class PPEDetector:
 
     # ------------------------------------------------------------------
     # HSV ranges for high-visibility vest colours (OpenCV H: 0-180)
-    # Each entry: (H_low, H_high, S_min, V_min)
+    # Each entry: (H_low, H_high, S_min, S_max, V_min, V_max)
     VEST_HSV_RANGES = [
-        (15,  35, 120,  80),   # Yellow  (hi-vis yellow)
-        ( 5,  15, 150,  80),   # Orange  (hi-vis orange)
-        (35,  80,  80,  80),   # Lime / fluorescent green
+        (15,  35, 120, 255,  80, 255),   # Yellow  (hi-vis yellow)
+        ( 5,  15, 150, 255,  80, 255),   # Orange  (hi-vis orange)
+        (35,  80,  80, 255,  80, 255),   # Lime / fluorescent green
     ]
-    VEST_COLOR_MIN_RATIO = 0.08   # ≥8 % of torso pixels must match
+    VEST_COLOR_MIN_RATIO = 0.06   # ≥6 % of torso pixels must match
+
+    # HSV ranges for hard hat colours (OpenCV H: 0-180)
+    HELMET_HSV_RANGES = [
+        (20,  35, 100, 255, 100, 255),   # Yellow hard hat
+        ( 5,  20, 150, 255, 100, 255),   # Orange hard hat
+        (  0,   8, 100, 255,  80, 255),  # Red hard hat (low hue)
+        (165, 180, 100, 255,  80, 255),  # Red hard hat (high hue wrap)
+        (100, 130,  80, 255,  80, 255),  # Blue hard hat
+        (  0, 180,   0,  50, 180, 255),  # White hard hat (low saturation, high value)
+    ]
+    HELMET_COLOR_MIN_RATIO = 0.10   # ≥10 % of head pixels must match
 
     def detect_vest_by_color(self, frame: np.ndarray, person_bbox: list) -> bool:
         """
@@ -177,13 +188,49 @@ class PPEDetector:
             return False
 
         mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
-        for (hl, hh, smin, vmin) in self.VEST_HSV_RANGES:
+        for (hl, hh, smin, smax, vmin, vmax) in self.VEST_HSV_RANGES:
             lower = np.array([hl,  smin, vmin], dtype=np.uint8)
-            upper = np.array([hh,  255,  255],  dtype=np.uint8)
+            upper = np.array([hh,  smax, vmax], dtype=np.uint8)
             mask |= cv2.inRange(hsv, lower, upper)
 
         ratio = np.count_nonzero(mask) / total
         return ratio >= self.VEST_COLOR_MIN_RATIO
+
+    # ------------------------------------------------------------------
+    def detect_helmet_by_color(self, frame: np.ndarray, person_bbox: list) -> bool:
+        """
+        Check for a hard hat using HSV color analysis on the person's head
+        region (top 25% of the bounding box).
+
+        Covers yellow, orange, red, blue, and white hard hats.
+        Returns True if a sufficient area of helmet colour is found.
+        """
+        px1, py1, px2, py2 = person_bbox
+        h_box = py2 - py1
+
+        # Crop to head: top 25% of bbox
+        h1 = max(0, py1)
+        h2 = py1 + int(h_box * 0.25)
+        h2 = min(frame.shape[0], h2)
+        x1 = max(0, px1); x2 = min(frame.shape[1], px2)
+
+        if h2 <= h1 or x2 <= x1:
+            return False
+
+        head = frame[h1:h2, x1:x2]
+        if head.size == 0:
+            return False
+        hsv   = cv2.cvtColor(head, cv2.COLOR_BGR2HSV)
+        total = head.shape[0] * head.shape[1]
+
+        mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
+        for (hl, hh, smin, smax, vmin, vmax) in self.HELMET_HSV_RANGES:
+            lower = np.array([hl,  smin, vmin], dtype=np.uint8)
+            upper = np.array([hh,  smax, vmax], dtype=np.uint8)
+            mask |= cv2.inRange(hsv, lower, upper)
+
+        ratio = np.count_nonzero(mask) / total
+        return ratio >= self.HELMET_COLOR_MIN_RATIO
 
     # ------------------------------------------------------------------
     def check_ppe_for_person(self, person: dict, ppe_detections: list[dict],
@@ -226,7 +273,16 @@ class PPEDetector:
             has_vest    = True
             vest_source = 'color'
 
-        return {'helmet': has_helmet, 'vest': has_vest, 'vest_source': vest_source}
+        # HSV colour fallback for helmet
+        helmet_source = None
+        if has_helmet:
+            helmet_source = 'yolo'
+        elif frame is not None and self.detect_helmet_by_color(frame, person['bbox']):
+            has_helmet    = True
+            helmet_source = 'color'
+
+        return {'helmet': has_helmet, 'vest': has_vest,
+                'vest_source': vest_source, 'helmet_source': helmet_source}
 
     # ------------------------------------------------------------------
     def draw_results(self, frame: np.ndarray, detections: list[dict]) -> np.ndarray:
