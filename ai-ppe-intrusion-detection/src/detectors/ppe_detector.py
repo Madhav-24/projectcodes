@@ -153,8 +153,8 @@ class PPEDetector:
 
     # HSV ranges for hard hat colours (OpenCV H: 0-180)
     HELMET_HSV_RANGES = [
-        (20,  35, 100, 255, 100, 255),   # Yellow hard hat
-        ( 5,  20, 150, 255, 100, 255),   # Orange hard hat
+        (15,  38,  70, 255,  80, 255),   # Yellow hard hat (broadened, lower S)
+        ( 5,  18,  70, 255,  80, 255),   # Orange hard hat (broadened, lower S)
         (  0,   8, 100, 255,  80, 255),  # Red hard hat (low hue)
         (165, 180, 100, 255,  80, 255),  # Red hard hat (high hue wrap)
         (100, 130,  80, 255,  80, 255),  # Blue hard hat

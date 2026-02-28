@@ -67,11 +67,11 @@ class IntrusionDetector:
         for person in persons:
             # Step 3: Cross-validate to filter false COCO detections (machinery,
             # signage, etc.).
-            # High-confidence COCO detections (≥ 0.40) are trusted directly.
-            # Low-confidence ones (0.20–0.40) must be confirmed by the custom
+            # High-confidence COCO detections (≥ 0.35) are trusted directly.
+            # Low-confidence ones (0.10–0.35) must be confirmed by the custom
             # model (Person class 4 or a PPE item overlapping the bbox).
             coco_conf = person.get('confidence', 0.0)
-            if coco_conf < 0.40:
+            if coco_conf < 0.35:
                 confirmed = self._is_person_confirmed(person['bbox'], custom_persons, ppe_items)
                 if not confirmed:
                     continue  # low-confidence and unconfirmed — drop it
@@ -103,19 +103,23 @@ class IntrusionDetector:
                               ppe_items: list, min_overlap: float = 0.15) -> bool:
         """
         Cross-validate a COCO person detection against the custom model.
+        Expands the bbox 20% downward to catch vests that fall just below
+        the COCO person boundary.
 
         Returns True if:
           - The custom model also detects a Person (class 4) overlapping ≥ 15%, OR
-          - At least one PPE item (helmet/vest) overlaps ≥ 15% of the person bbox
-            (presence of PPE implies a real human is wearing it).
+          - At least one PPE item (helmet/vest) overlaps ≥ 15% of the expanded bbox.
         """
         px1, py1, px2, py2 = bbox
-        p_area = max(1, (px2 - px1) * (py2 - py1))
+        # Expand bbox downward by 20% of the person height to catch low vests
+        expand = int((py2 - py1) * 0.20)
+        py2_exp = py2 + expand
+        p_area = max(1, (px2 - px1) * (py2_exp - py1))
 
         for candidate in custom_persons + ppe_items:
             cx1, cy1, cx2, cy2 = candidate['bbox']
             ix = max(0, min(px2, cx2) - max(px1, cx1))
-            iy = max(0, min(py2, cy2) - max(py1, cy1))
+            iy = max(0, min(py2_exp, cy2) - max(py1, cy1))
             if ix * iy / p_area >= min_overlap:
                 return True
         return False
