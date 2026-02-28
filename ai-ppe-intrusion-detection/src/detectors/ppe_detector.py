@@ -15,30 +15,45 @@ class PPEDetector:
         3 = objects
     """
 
-    CLASS_NAMES = {0: 'Helmet', 1: 'Person', 2: 'Vest', 3: 'objects'}
-    PERSON_ID   = 1
-    HELMET_ID   = 0
-    VEST_ID     = 2
+    # Class IDs from updated data.yaml (6 classes)
+    # 0=Boots, 1=Gloves, 2=Goggles, 3=Helmet, 4=Person, 5=Vest
+    CLASS_NAMES = {0: 'Boots', 1: 'Gloves', 2: 'Goggles', 3: 'Helmet', 4: 'Person', 5: 'Vest'}
+    PERSON_ID   = 4
+    HELMET_ID   = 3
+    VEST_ID     = 5
+    BOOTS_ID    = 0
+    GLOVES_ID   = 1
+    GOGGLES_ID  = 2
+    COCO_PERSON_ID = 0  # class 0 = 'person' in COCO pretrained models
 
-    def __init__(self, weights: str = 'yolov8n.pt',
-                 conf_threshold: float = 0.4,
+    def __init__(self, weights: str = 'yolo11n.pt',
+                 person_weights: str = 'yolo11n.pt',
+                 conf_threshold: float = 0.35,
                  nms_threshold: float = 0.45,
                  device: str = 'cpu',
                  image_size: int = 640):
         """
         Args:
-            weights:        Path to .pt weights file, or 'yolov8n.pt' to use
-                            the COCO pre-trained model.
+            weights:        Path to custom PPE .pt weights file.
+            person_weights: Pretrained YOLO weights for person detection (COCO).
+                            If same as weights, a single model is used.
             conf_threshold: Minimum confidence to keep a detection.
             nms_threshold:  IoU threshold for Non-Maximum Suppression.
             device:         'cpu' or 'cuda'.
             image_size:     Inference image size.
         """
-        self.conf  = conf_threshold
-        self.iou   = nms_threshold
+        self.conf   = conf_threshold
+        self.iou    = nms_threshold
         self.device = device
-        self.imgsz = image_size
-        self.model = YOLO(weights)
+        self.imgsz  = image_size
+        self.model  = YOLO(weights)
+        # Use a separate pretrained COCO model for robust person detection
+        if person_weights == weights:
+            self.person_model = self.model
+            self.use_coco_person = False
+        else:
+            self.person_model = YOLO(person_weights)
+            self.use_coco_person = True
 
     # ------------------------------------------------------------------
     def detect(self, frame: np.ndarray) -> list[dict]:
@@ -77,6 +92,33 @@ class PPEDetector:
                     'confidence': round(conf, 3)
                 })
         return detections
+
+    # ------------------------------------------------------------------
+    def detect_persons(self, frame: np.ndarray) -> list[dict]:
+        """
+        Detect persons using the dedicated person model.
+        Uses COCO pretrained YOLO (class 0 = person) for best accuracy.
+        """
+        results = self.person_model.predict(
+            source=frame, conf=self.conf, iou=self.iou,
+            device=self.device, imgsz=self.imgsz, verbose=False
+        )
+        persons = []
+        for r in results:
+            for box in r.boxes:
+                cls_id = int(box.cls[0])
+                # COCO pretrained: class 0 = person
+                # Custom model: class 4 = Person
+                if (self.use_coco_person and cls_id == self.COCO_PERSON_ID) or \
+                   (not self.use_coco_person and cls_id == self.PERSON_ID):
+                    x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                    persons.append({
+                        'bbox':       [x1, y1, x2, y2],
+                        'class_id':   self.PERSON_ID,
+                        'class_name': 'Person',
+                        'confidence': round(float(box.conf[0]), 3)
+                    })
+        return persons
 
     # ------------------------------------------------------------------
     def get_persons(self, detections: list[dict]) -> list[dict]:

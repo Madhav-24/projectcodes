@@ -26,9 +26,12 @@ VIDEO_EXTS = {'.mp4', '.avi', '.mov', '.mkv', '.webm'}
 
 def parse_args():
     parser = argparse.ArgumentParser(description='PPE & Intrusion Inference')
-    parser.add_argument('--source',  type=str, required=True)
-    parser.add_argument('--weights', type=str, default='yolov8n.pt')
-    parser.add_argument('--conf',    type=float, default=0.4)
+    parser.add_argument('--source',         type=str, required=True)
+    parser.add_argument('--weights',        type=str, default='runs/detect/runs/train/ppe_model/weights/best.pt',
+                        help='Custom PPE model weights')
+    parser.add_argument('--person-weights', type=str, default='yolo11n.pt',
+                        help='Pretrained YOLO weights for person detection (COCO)')
+    parser.add_argument('--conf',    type=float, default=0.35)
     parser.add_argument('--iou',     type=float, default=0.45)
     parser.add_argument('--device',  type=str, default='cpu')
     parser.add_argument('--imgsz',   type=int, default=640)
@@ -43,6 +46,7 @@ def parse_args():
 def build_pipeline(args):
     detector = PPEDetector(
         weights=args.weights,
+        person_weights=args.person_weights,  # pretrained COCO for person detection
         conf_threshold=args.conf,
         nms_threshold=args.iou,
         device=args.device,
@@ -55,7 +59,7 @@ def build_pipeline(args):
     )
 
 
-def run_on_image(path, classifier, args, out_dir):
+def run_on_image(path, classifier, args, out_dir, show=True):
     frame = cv2.imread(path)
     if frame is None:
         print(f"[ERROR] Cannot read image: {path}")
@@ -65,8 +69,9 @@ def run_on_image(path, classifier, args, out_dir):
     workers   = sum(1 for r in results if r['label'] == 'Worker')
     intruders = sum(1 for r in results if r['label'] == 'Intruder')
     print(f"[INFO] {os.path.basename(path):40s} | Persons: {len(results):2d} | Workers: {workers} | Intruders: {intruders}")
-    cv2.imshow('PPE Intrusion Detection  [Q to quit]', annotated)
-    cv2.waitKey(0)
+    if show:
+        cv2.imshow('PPE Intrusion Detection  [Q to quit]', annotated)
+        cv2.waitKey(0)
     if args.save:
         out_path = os.path.join(out_dir, 'img_' + os.path.basename(path))
         cv2.imwrite(out_path, annotated)
@@ -133,7 +138,7 @@ def main():
         files = sorted([f for f in os.listdir(source) if os.path.splitext(f)[1].lower() in IMAGE_EXTS])
         print(f"[INFO] Found {len(files)} images in {source}")
         for fname in files:
-            run_on_image(os.path.join(source, fname), classifier, args, out_dir)
+            run_on_image(os.path.join(source, fname), classifier, args, out_dir, show=False)
         cv2.destroyAllWindows()
     else:
         print(f"[ERROR] Unrecognised source: {source}")

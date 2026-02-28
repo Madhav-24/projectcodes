@@ -31,7 +31,8 @@ class IntrusionDetector:
     # ------------------------------------------------------------------
     def process_frame(self, frame: np.ndarray) -> list[dict]:
         """
-        Full pipeline: detect all objects, then classify each person.
+        Full pipeline: detect persons (pretrained YOLO) + PPE (custom model),
+        then classify each person as Worker or Intruder.
 
         Args:
             frame: BGR numpy array (from OpenCV).
@@ -39,14 +40,16 @@ class IntrusionDetector:
         Returns:
             List of result dicts, one per detected person:
             {
-                'person':     detection dict (bbox, confidence),
-                'ppe':        {'helmet': bool, 'vest': bool},
-                'label':      'Worker' | 'Intruder',
+                'person':      detection dict (bbox, confidence),
+                'ppe':         {'helmet': bool, 'vest': bool, 'boots': bool, ...},
+                'label':       'Worker' | 'Intruder',
                 'missing_ppe': list of missing items e.g. ['Helmet']
             }
         """
+        # Use dedicated person model for person detection
+        persons   = self.ppe_detector.detect_persons(frame)
+        # Use custom PPE model for PPE detection
         detections = self.ppe_detector.detect(frame)
-        persons    = self.ppe_detector.get_persons(detections)
         ppe_items  = self.ppe_detector.get_ppe(detections)
 
         results = []
@@ -70,9 +73,9 @@ class IntrusionDetector:
             (label, missing_items)
         """
         missing = []
-        if self.require_helmet and not ppe_status['helmet']:
+        if self.require_helmet and not ppe_status.get('helmet', False):
             missing.append('Helmet')
-        if self.require_vest and not ppe_status['vest']:
+        if self.require_vest and not ppe_status.get('vest', False):
             missing.append('Vest')
 
         label = self.WORKER if len(missing) == 0 else self.INTRUDER
