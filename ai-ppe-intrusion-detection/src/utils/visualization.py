@@ -49,9 +49,12 @@ def draw_detections(frame: np.ndarray, results: list[dict]) -> np.ndarray:
 
         # PPE status tags
         tag_y = y2 + 16
-        for item, present in [('Helmet', ppe['helmet']), ('Vest', ppe['vest'])]:
+        vest_src = ppe.get('vest_source')
+        vest_label = 'Vest(HSV)' if vest_src == 'color' else 'Vest'
+        for item, present in [('Helmet', ppe['helmet']), (vest_label, ppe['vest'])]:
             icon      = '[OK]' if present else '[X]'
-            color_tag = (COLOR_HELMET if item == 'Helmet' else COLOR_VEST) if present else COLOR_MISSING
+            base_name = 'Vest' if 'Vest' in item else item
+            color_tag = (COLOR_HELMET if base_name == 'Helmet' else COLOR_VEST) if present else COLOR_MISSING
             cv2.putText(out, f"{icon} {item}", (x1, tag_y),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_tag, 2)
             tag_y += 18

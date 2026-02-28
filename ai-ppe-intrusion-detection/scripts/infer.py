@@ -39,9 +39,8 @@ def parse_args():
     parser.add_argument('--imgsz',   type=int, default=640)
     parser.add_argument('--save',    action='store_true')
     parser.add_argument('--log',     action='store_true')
-    parser.add_argument('--no-helmet',   action='store_false', dest='require_helmet')
-    parser.add_argument('--require-vest', action='store_true',  dest='require_vest',
-                        help='Also require vest for Worker classification (disabled by default: vest model generalizes poorly)')
+    parser.add_argument('--no-helmet', action='store_false', dest='require_helmet')
+    parser.add_argument('--no-vest',   action='store_false', dest='require_vest')
     parser.set_defaults(require_helmet=True, require_vest=False)
     return parser.parse_args()
 

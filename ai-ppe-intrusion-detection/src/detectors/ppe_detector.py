@@ -142,15 +142,59 @@ class PPEDetector:
         return [d for d in detections if d['class_id'] in (self.HELMET_ID, self.VEST_ID)]
 
     # ------------------------------------------------------------------
+    # HSV ranges for high-visibility vest colours (OpenCV H: 0-180)
+    # Each entry: (H_low, H_high, S_min, V_min)
+    VEST_HSV_RANGES = [
+        (15,  35, 120,  80),   # Yellow  (hi-vis yellow)
+        ( 5,  15, 150,  80),   # Orange  (hi-vis orange)
+        (35,  80,  80,  80),   # Lime / fluorescent green
+    ]
+    VEST_COLOR_MIN_RATIO = 0.08   # ≥8 % of torso pixels must match
+
+    def detect_vest_by_color(self, frame: np.ndarray, person_bbox: list) -> bool:
+        """
+        Check for a high-visibility vest using HSV color analysis on the
+        person's torso region (middle vertical third of the bounding box).
+
+        Returns True if a sufficient area of hi-vis colour is found.
+        """
+        px1, py1, px2, py2 = person_bbox
+        h_box = py2 - py1
+
+        # Crop to torso: skip top 30% (head/helmet) and bottom 20% (legs)
+        t1 = py1 + int(h_box * 0.30)
+        t2 = py1 + int(h_box * 0.80)
+        t1 = max(0, t1);  t2 = min(frame.shape[0], t2)
+        x1 = max(0, px1); x2 = min(frame.shape[1], px2)
+
+        if t2 <= t1 or x2 <= x1:
+            return False
+
+        torso = frame[t1:t2, x1:x2]
+        hsv   = cv2.cvtColor(torso, cv2.COLOR_BGR2HSV)
+        total = torso.shape[0] * torso.shape[1]
+        if total == 0:
+            return False
+
+        mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
+        for (hl, hh, smin, vmin) in self.VEST_HSV_RANGES:
+            lower = np.array([hl,  smin, vmin], dtype=np.uint8)
+            upper = np.array([hh,  255,  255],  dtype=np.uint8)
+            mask |= cv2.inRange(hsv, lower, upper)
+
+        ratio = np.count_nonzero(mask) / total
+        return ratio >= self.VEST_COLOR_MIN_RATIO
+
+    # ------------------------------------------------------------------
     def check_ppe_for_person(self, person: dict, ppe_detections: list[dict],
-                              iou_thresh: float = 0.15) -> dict:
+                              iou_thresh: float = 0.15,
+                              frame: np.ndarray = None) -> dict:
         """
         For a single person bbox, check which PPE items overlap with it.
-
-        Uses IoU between person box and each PPE box to determine association.
+        Also runs HSV color analysis as a fallback for vest detection.
 
         Returns:
-            {'helmet': bool, 'vest': bool}
+            {'helmet': bool, 'vest': bool, 'vest_source': 'yolo'|'color'|None}
         """
         px1, py1, px2, py2 = person['bbox']
         has_helmet = False
@@ -174,7 +218,15 @@ class PPEDetector:
                 elif ppe['class_id'] == self.VEST_ID:
                     has_vest = True
 
-        return {'helmet': has_helmet, 'vest': has_vest}
+        # HSV colour fallback: if YOLO missed the vest, try colour detection
+        vest_source = None
+        if has_vest:
+            vest_source = 'yolo'
+        elif frame is not None and self.detect_vest_by_color(frame, person['bbox']):
+            has_vest    = True
+            vest_source = 'color'
+
+        return {'helmet': has_helmet, 'vest': has_vest, 'vest_source': vest_source}
 
     # ------------------------------------------------------------------
     def draw_results(self, frame: np.ndarray, detections: list[dict]) -> np.ndarray:

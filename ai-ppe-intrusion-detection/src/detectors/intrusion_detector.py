@@ -54,7 +54,9 @@ class IntrusionDetector:
 
         results = []
         for person in persons:
-            ppe_status = self.ppe_detector.check_ppe_for_person(person, ppe_items)
+            ppe_status = self.ppe_detector.check_ppe_for_person(
+                person, ppe_items, frame=frame  # pass frame for HSV colour fallback
+            )
             label, missing = self._classify(ppe_status)
             results.append({
                 'person':      person,
@@ -68,17 +70,23 @@ class IntrusionDetector:
     def _classify(self, ppe_status: dict) -> tuple[str, list[str]]:
         """
         Classify a person based on PPE status.
+        Worker = wearing AT LEAST ONE of helmet / vest.
+        Intruder = wearing neither.
 
         Returns:
-            (label, missing_items)
+            (label, missing_items)  — missing lists items they should have
         """
+        has_helmet = ppe_status.get('helmet', False)
+        has_vest   = ppe_status.get('vest',   False)
+
         missing = []
-        if self.require_helmet and not ppe_status.get('helmet', False):
+        if not has_helmet:
             missing.append('Helmet')
-        if self.require_vest and not ppe_status.get('vest', False):
+        if not has_vest:
             missing.append('Vest')
 
-        label = self.WORKER if len(missing) == 0 else self.INTRUDER
+        # Worker if they have at least one PPE item
+        label = self.WORKER if (has_helmet or has_vest) else self.INTRUDER
         return label, missing
 
     # ------------------------------------------------------------------
