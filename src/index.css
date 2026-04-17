@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-slate-950 text-slate-100 antialiased;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+#root {
+  min-height: 100vh;
+  @apply bg-slate-950;
+}
+
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  background: #1f2937;
+}
+
+.leaflet-control-zoom-in,
+.leaflet-control-zoom-out {
+  @apply bg-slate-800 border border-slate-700 text-slate-300;
+}
+
+/* Ensure dark theme for all inputs */
+input[type='text'],
+input[type='email'],
+input[type='password'],
+input[type='date'],
+input[type='number'],
+select,
+textarea {
+  @apply bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-500;
+}
+
+input[type='text']:focus,
+input[type='email']:focus,
+input[type='password']:focus,
+input[type='date']:focus,
+input[type='number']:focus,
+select:focus,
+textarea:focus {
+  @apply border-blue-500 ring-blue-500/20;
+}
+
+/* Recharts dark theme */
+.recharts-text {
+  @apply fill-slate-400;
+}
+
+.recharts-cartesian-axis-line {
+  @apply stroke-slate-700;
+}
+
+.recharts-tooltip-wrapper {
+  outline: none;
+}
+
+.recharts-default-tooltip {
+  @apply bg-slate-800 border border-slate-700 rounded-lg;
+}
