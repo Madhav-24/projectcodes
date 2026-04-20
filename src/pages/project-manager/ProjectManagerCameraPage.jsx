@@ -1,10 +1,7 @@
-import { useState } from 'react';
-import { FaCamera, FaUpload, FaCircle } from 'react-icons/fa';
+import { FaCamera, FaCircle } from 'react-icons/fa';
 import Sidebar from '../../components/layout/Sidebar.jsx';
 
 function ProjectManagerCameraPage() {
-  const [dragActive, setDragActive] = useState(false);
-
   const sites = [
     {
       name: 'Site 1 - Earthwork & Structural',
@@ -34,26 +31,6 @@ function ProjectManagerCameraPage() {
     },
   ];
 
-  const handleDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    const files = e.dataTransfer.files;
-    if (files && files[0]) {
-      console.log('File uploaded:', files[0]);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <Sidebar />
@@ -64,25 +41,7 @@ function ProjectManagerCameraPage() {
             <h1 className="text-3xl font-bold text-white flex items-center gap-2">
               <FaCamera className="text-cyan-400" /> Live Camera Feed
             </h1>
-            <p className="mt-2 text-xs text-blue-400">Upload image/video for YOLO v8 AI analysis - Click any camera for details</p>
-          </div>
-
-          {/* Upload Area */}
-          <div
-            className={`rounded-2xl border-2 border-dashed p-12 text-center transition ${
-              dragActive
-                ? 'border-blue-500 bg-blue-500/10'
-                : 'border-slate-600 bg-slate-900/50'
-            }`}
-            onDragEnter={handleDrag}
-            onDragLeave={handleDrag}
-            onDragOver={handleDrag}
-            onDrop={handleDrop}
-          >
-            <FaUpload className="mx-auto mb-4 text-4xl text-slate-500" />
-            <h3 className="mb-2 text-lg font-semibold text-white">Upload Image or Video for YOLO v8 Analysis</h3>
-            <p className="text-sm text-slate-400">Detect: Hard Hats, Safety Vest, PPE Compliance, Personnel, Machinery</p>
-            <input type="file" className="hidden" accept="image/*,video/*" />
+            <p className="mt-2 text-xs text-blue-400">Click any camera for details</p>
           </div>
 
           {/* Sites Grid */}

@@ -1,6 +1,7 @@
 ﻿import Sidebar from './Sidebar.jsx';
+import LiveClock from '../common/LiveClock.jsx';
 
-function PageShell({ title, description, children }) {
+function PageShell({ title, description, children, showClock = false }) {
   return (
     <div className="min-h-screen bg-slate-950">
       <div className="flex min-h-screen overflow-hidden">
@@ -11,6 +12,11 @@ function PageShell({ title, description, children }) {
               <h2 className="text-2xl font-semibold text-white">{title}</h2>
               {description && <p className="mt-1 text-sm text-slate-400">{description}</p>}
             </div>
+            {showClock && (
+              <div className="hidden lg:block">
+                <LiveClock />
+              </div>
+            )}
           </div>
           {children}
         </main>

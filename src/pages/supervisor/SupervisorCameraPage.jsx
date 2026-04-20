@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { FaCamera, FaUpload, FaCircle, FaHardHat, FaTools } from 'react-icons/fa';
+import { FaCamera, FaCircle, FaHardHat, FaTools } from 'react-icons/fa';
 import { MdConstruction } from 'react-icons/md';
 import PageShell from '../../components/layout/PageShell.jsx';
 
@@ -106,60 +105,12 @@ function SiteSection({ site }) {
 }
 
 function SupervisorCameraPage() {
-  const [dragActive, setDragActive] = useState(false);
-
-  const handleDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') setDragActive(true);
-    else if (e.type === 'dragleave') setDragActive(false);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    const files = e.dataTransfer.files;
-    if (files && files[0]) console.log('File uploaded:', files[0]);
-  };
-
   return (
     <PageShell
       title="Live Camera Feed"
-      description="Upload image/video for YOLO v8 AI analysis · Click any camera for details"
+      description="Click any camera for details"
     >
       <div className="space-y-6">
-
-        {/* YOLO Upload Zone */}
-        <div
-          className={`rounded-2xl border-2 border-dashed p-10 text-center transition-all duration-200 ${
-            dragActive
-              ? 'border-violet-500 bg-violet-500/10'
-              : 'border-slate-700 bg-slate-900/40'
-          }`}
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
-        >
-          <label htmlFor="yolo-upload-supervisor" className="cursor-pointer">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-violet-600/20 border border-violet-500/30">
-              <FaUpload className="text-xl text-violet-400" />
-            </div>
-            <h3 className="mb-1 text-base font-semibold text-white">
-              Upload Image or Video for YOLO v8 Analysis
-            </h3>
-            <p className="text-xs text-slate-500">
-              Detects: Hard Hat, Safety Vest, PPE Compliance, Persons, Machinery
-            </p>
-            <input
-              id="yolo-upload-supervisor"
-              type="file"
-              className="hidden"
-              accept="image/*,video/*"
-            />
-          </label>
-        </div>
 
         {/* All Sites & Cameras */}
         <div className="space-y-8">

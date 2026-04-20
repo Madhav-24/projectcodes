@@ -83,7 +83,11 @@ function EngineerDashboardPage() {
   const recentAlerts = alerts.slice(0, 5);
 
   return (
-    <PageShell title="Engineer Dashboard" description="Monitor your assigned site performance with the same dashboard experience shown in the template.">
+    <PageShell
+      title="Engineer Dashboard"
+      description="Monitor your assigned site performance with the same dashboard experience shown in the template."
+      showClock
+    >
       <div className="space-y-6">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-[32px] border border-slate-700 bg-slate-950 p-6 shadow-card">

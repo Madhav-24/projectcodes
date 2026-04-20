@@ -6,6 +6,10 @@
   color-scheme: dark;
 }
 
+.theme-light {
+  color-scheme: light;
+}
+
 body {
   @apply bg-slate-950 text-slate-100 antialiased;
   font-family: 'Inter', system-ui, sans-serif;
@@ -63,4 +67,70 @@ textarea:focus {
 
 .recharts-default-tooltip {
   @apply bg-slate-800 border border-slate-700 rounded-lg;
+}
+
+.theme-light body,
+.theme-light #root {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+.theme-light .bg-slate-950,
+.theme-light [class*='bg-slate-950'] {
+  background-color: #f8fafc !important;
+}
+
+.theme-light .bg-slate-900,
+.theme-light [class*='bg-slate-900'] {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+}
+
+.theme-light .bg-slate-800,
+.theme-light [class*='bg-slate-800'] {
+  background-color: rgba(241, 245, 249, 0.96) !important;
+}
+
+.theme-light .border-slate-700,
+.theme-light .border-slate-800,
+.theme-light [class*='border-slate-7'],
+.theme-light [class*='border-slate-8'] {
+  border-color: rgba(148, 163, 184, 0.5) !important;
+}
+
+.theme-light .text-white,
+.theme-light .text-slate-100,
+.theme-light .text-slate-200,
+.theme-light .text-slate-300 {
+  color: #0f172a !important;
+}
+
+.theme-light .text-slate-400 {
+  color: #475569 !important;
+}
+
+.theme-light .text-slate-500 {
+  color: #64748b !important;
+}
+
+.theme-light .shadow-card,
+.theme-light .shadow-2xl,
+.theme-light .shadow-lg {
+  box-shadow: 0 16px 40px rgba(148, 163, 184, 0.18) !important;
+}
+
+.theme-light .leaflet-container {
+  background: #e2e8f0;
+}
+
+.theme-light .recharts-text {
+  fill: #475569 !important;
+}
+
+.theme-light .recharts-cartesian-axis-line {
+  stroke: #cbd5e1 !important;
+}
+
+.theme-light .recharts-default-tooltip {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
 }
