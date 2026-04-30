@@ -1,3 +1,6 @@
+// Module: Role Route
+// Purpose: Restrict access to routes based on the user's role.
+
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuthContext } from '../context/AuthContext.jsx';
 

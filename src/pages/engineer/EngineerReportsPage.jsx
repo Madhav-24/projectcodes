@@ -1,11 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FaCalendarAlt, FaDownload, FaFileAlt } from 'react-icons/fa';
-import { collection, getFirestore, onSnapshot, orderBy, query, where } from 'firebase/firestore';
-import app from '../../firebase/firebaseConfig.js';
 import PageShell from '../../components/layout/PageShell.jsx';
 import { useAuth } from '../../hooks/useAuth.jsx';
-
-const db = getFirestore(app);
 
 function formatDate(value) {
   if (!value) return 'Unknown';
@@ -55,26 +51,9 @@ const DEFAULT_REPORTS = [
 function EngineerReportsPage() {
   const { profile } = useAuth();
   const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (!profile?.assignedSite) {
-      setReports([]);
-      setLoading(false);
-      return;
-    }
-
-    const q = query(collection(db, 'reports'), where('siteId', '==', profile.assignedSite), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        setReports(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-      },
-      () => setLoading(false)
-    );
-    return unsubscribe;
-  }, [profile]);
+  // Reports will be fetched from the PostgreSQL backend in a future iteration.
 
   const firestoreRows = useMemo(
     () => reports.map((report) => ({

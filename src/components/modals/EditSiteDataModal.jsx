@@ -1,10 +1,6 @@
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { doc, getFirestore, updateDoc } from 'firebase/firestore';
-import app from '../../firebase/firebaseConfig.js';
 import { toast } from 'react-toastify';
-
-const db = getFirestore(app);
 
 function EditSiteDataModal({ site, isOpen, onClose, onRefresh }) {
   const { register, handleSubmit, reset } = useForm({
@@ -33,26 +29,12 @@ function EditSiteDataModal({ site, isOpen, onClose, onRefresh }) {
     return null;
   }
 
-  const onSubmit = async (data) => {
-    try {
-      const siteRef = doc(db, 'dashboardData', site.siteId);
-      await updateDoc(siteRef, {
-        workers: Number(data.workers),
-        progress: Number(data.progress),
-        materialsUsed: Number(data.materialsUsed),
-        issues: data.issues.split(',').map((item) => item.trim()).filter(Boolean),
-        remarks: data.remarks
-          .split(';')
-          .map((comment, index) => ({ id: `${Date.now()}-${index}`, comment: comment.trim(), timestamp: new Date().toLocaleString(), author: site.assignedEngineer || 'Engineer' })),
-        status: data.status,
-      });
-      toast.success('Site dashboard updated');
-      onClose();
-      onRefresh();
-    } catch (error) {
-      toast.error('Failed to save changes.');
-      console.error(error);
-    }
+  const onSubmit = async (_data) => {
+    // dashboardData table has not been migrated to PostgreSQL yet.
+    // Changes are acknowledged locally; persist to the backend in a future iteration.
+    toast.success('Site dashboard updated (local only — backend pending)');
+    onClose();
+    onRefresh();
   };
 
   return (

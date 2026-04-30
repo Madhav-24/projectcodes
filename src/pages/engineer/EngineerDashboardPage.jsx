@@ -1,59 +1,36 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { collection, getFirestore, onSnapshot, orderBy, query, where, limit } from 'firebase/firestore';
 import { FaHardHat, FaVideo, FaExclamationTriangle, FaChartBar } from 'react-icons/fa';
-import app from '../../firebase/firebaseConfig.js';
 import PageShell from '../../components/layout/PageShell.jsx';
 import { useAccessControl } from '../../hooks/useAccessControl.jsx';
-
-const db = getFirestore(app);
+import { api } from '../../api/client.js';
 
 function EngineerDashboardPage() {
   const { assignedSites } = useAccessControl();
   const [siteData, setSiteData] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [resolvedAlertIds, setResolvedAlertIds] = useState(new Set());
   const assignedSite = assignedSites[0];
 
+  // Poll alerts from REST API every 5 seconds
   useEffect(() => {
-    if (!assignedSite) {
-      setSiteData(null);
-      setLoading(false);
-      return;
+    let active = true;
+    async function fetchAlerts() {
+      if (!active) return;
+      try {
+        const data = await api.get('/api/alerts');
+        setAlerts(data.slice(0, 5));
+      } catch (err) {
+        console.error('Failed to fetch alerts:', err);
+      } finally {
+        if (active) setLoading(false);
+      }
+      if (active) setTimeout(fetchAlerts, 5000);
     }
-
-    const q = query(collection(db, 'dashboardData'), where('siteId', '==', assignedSite));
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const data = snapshot.docs.map((doc) => ({ siteId: doc.id, ...doc.data() }));
-        setSiteData(data[0] || null);
-        setLoading(false);
-      },
-      () => setLoading(false)
-    );
-
-    return unsubscribe;
-  }, [assignedSite]);
-
-  useEffect(() => {
-    if (!assignedSite) {
-      setAlerts([]);
-      return;
-    }
-
-    const alertQuery = query(
-      collection(db, 'alerts'),
-      where('siteId', '==', assignedSite),
-      orderBy('createdAt', 'desc'),
-      limit(5)
-    );
-    const unsubscribe = onSnapshot(alertQuery, (snapshot) => {
-      setAlerts(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
-
-    return unsubscribe;
-  }, [assignedSite]);
+    fetchAlerts();
+    return () => { active = false; };
+  }, []);
 
   const overview = useMemo(() => ({
     workers: siteData?.workers ?? 0,
@@ -80,14 +57,14 @@ function EngineerDashboardPage() {
     { name: 'Sun', workers: 22, machines: 5 },
   ];
 
-  const recentAlerts = alerts.slice(0, 5);
+  const recentAlerts = alerts.filter((a) => !resolvedAlertIds.has(a.id)).slice(0, 5);
+
+  const handleResolveAlert = (alertId) => {
+    setResolvedAlertIds((prev) => new Set([...prev, alertId]));
+  };
 
   return (
-    <PageShell
-      title="Engineer Dashboard"
-      description="Monitor your assigned site performance with the same dashboard experience shown in the template."
-      showClock
-    >
+    <PageShell title="Engineer Dashboard" description="Monitor your assigned site performance with the same dashboard experience shown in the template.">
       <div className="space-y-6">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-[32px] border border-slate-700 bg-slate-950 p-6 shadow-card">
@@ -216,7 +193,10 @@ function EngineerDashboardPage() {
                   </div>
                   <div className="mt-4 flex flex-wrap gap-3">
                     <button className="rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500">View</button>
-                    <button className="rounded-full border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-500">Resolve</button>
+                    <button
+                      onClick={() => handleResolveAlert(alert.id)}
+                      className="rounded-full border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-500"
+                    >Resolve</button>
                   </div>
                 </div>
               ))

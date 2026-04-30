@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
 import { FaCogs, FaUsers, FaPlus, FaEllipsisV, FaTrash } from 'react-icons/fa';
-import { collection, deleteDoc, doc, getFirestore, onSnapshot, query } from 'firebase/firestore';
-import app from '../../firebase/firebaseConfig.js';
 import Sidebar from '../../components/layout/Sidebar.jsx';
 import { useAuthContext } from '../../context/AuthContext.jsx';
 import { ROLE_OPTIONS, ROLES_REQUIRING_SITE } from '../../constants/roles.js';
-
-const db = getFirestore(app);
+import { getAllUsers } from '../../services/userService.js';
+import { toast } from 'react-toastify';
 
 function SettingsPage() {
   const { registerUser } = useAuthContext();
@@ -28,14 +26,19 @@ function SettingsPage() {
   const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
-    const q = query(collection(db, 'users'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setUsers(snapshot.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter((user) => user.role !== 'admin'));
-    });
-    return unsubscribe;
-  }, []);
+    let active = true;
+    async function fetchUsers() {
+      if (!active) return;
+      try {
+        const data = await getAllUsers();
+        if (active) setUsers(data.filter((u) => u.role !== 'admin'));
+      } catch (err) {
+        console.error('Failed to fetch users:', err);
+      }
+    }
+    fetchUsers();
+    return () => { active = false; };
+  }, [showModal]); // refetch after modal closes (new user created)
 
   const handleAdd = () => {
     setFormData({
@@ -130,12 +133,9 @@ function SettingsPage() {
 
     if (!confirmDeleteId) return;
 
-    try {
-      await deleteDoc(doc(db, 'users', confirmDeleteId));
-      setConfirmDeleteId(null);
-    } catch (error) {
-      setDeleteError(error.message || 'Failed to delete user details.');
-    }
+    // User deletion will be implemented via DELETE /api/users/:id in a future iteration.
+    toast.info('User deletion requires a backend DELETE endpoint — coming soon.');
+    setConfirmDeleteId(null);
   };
 
   return (

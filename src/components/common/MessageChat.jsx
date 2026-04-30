@@ -1,12 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FaSearch, FaPaperclip, FaCamera, FaPaperPlane, FaTimes, FaFileAlt, FaFileImage, FaFileVideo, FaFileAudio } from 'react-icons/fa';
-import { collection, getFirestore, onSnapshot, orderBy, query } from 'firebase/firestore';
-import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import app from '../../firebase/firebaseConfig.js';
 import { useAuthContext } from '../../context/AuthContext.jsx';
+import { api } from '../../api/client.js';
 
-const db = getFirestore(app);
-const storage = getStorage(app);
 const ATTACHMENT_ACCEPT = 'image/*,video/*,audio/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain';
 
 function MessageChat({ excludeRole }) {
@@ -24,39 +20,47 @@ function MessageChat({ excludeRole }) {
   const cameraInputRef = useRef(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem(`messages_read_${profile?.uid}`);
+    const userId = profile?.uid || profile?.id;
+    const stored = localStorage.getItem(`messages_read_${userId}`);
     if (stored) {
       setLastReadTimestamps(JSON.parse(stored));
     }
-  }, [profile?.uid]);
+  }, [profile?.uid, profile?.id]);
 
   const saveLastReadTimestamps = (timestamps) => {
+    const userId = profile?.uid || profile?.id;
     setLastReadTimestamps(timestamps);
-    localStorage.setItem(`messages_read_${profile?.uid}`, JSON.stringify(timestamps));
+    localStorage.setItem(`messages_read_${userId}`, JSON.stringify(timestamps));
   };
 
+  // Poll messages every 5 seconds
   useEffect(() => {
-    const q = query(collection(db, 'messages'), orderBy('timestamp', 'asc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setMessages(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
+    let active = true;
+    async function fetchMessages() {
+      if (!active) return;
+      try {
+        const data = await api.get('/api/messages');
+        if (active) setMessages(data);
+      } catch (err) {
+        console.error('Failed to fetch messages:', err);
+      }
+      if (active) setTimeout(fetchMessages, 5000);
+    }
+    fetchMessages();
+    return () => { active = false; };
+  }, []);
 
-    const recipientsQuery = query(collection(db, 'users'));
-    const unsubscribeRecipients = onSnapshot(recipientsQuery, (snapshot) => {
-      setRecipients(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
-
-    return () => {
-      unsubscribe();
-      unsubscribeRecipients();
-    };
+  // Fetch recipients once on mount
+  useEffect(() => {
+    api.get('/api/users').then((data) => setRecipients(data)).catch(console.error);
   }, []);
 
   const availableRecipients = useMemo(() => {
+    const userId = profile?.uid || profile?.id;
     return recipients.filter(
-      (user) => user.role !== excludeRole && user.id !== profile?.uid
+      (user) => user.role !== excludeRole && user.id !== userId
     );
-  }, [recipients, excludeRole, profile?.uid]);
+  }, [recipients, excludeRole, profile?.uid, profile?.id]);
 
   const handleSelectRecipient = (recipientId) => {
     setSelectedRecipient(recipientId);
@@ -71,6 +75,7 @@ function MessageChat({ excludeRole }) {
   }, [availableRecipients, selectedRecipient]);
 
   const filteredRecipients = useMemo(() => {
+    const userId = profile?.uid || profile?.id;
     let filtered = availableRecipients.filter((recipient) =>
       recipient.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       recipient.role?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -80,8 +85,8 @@ function MessageChat({ excludeRole }) {
       const unreadCount = messages.filter(
         (message) =>
           message.senderId === recipient.id &&
-          message.receiverId === profile?.uid &&
-          (!lastReadTimestamps[recipient.id] || message.timestamp?.toDate?.() > new Date(lastReadTimestamps[recipient.id]))
+          message.receiverId === userId &&
+          (!lastReadTimestamps[recipient.id] || new Date(message.createdAt || message.timestamp) > new Date(lastReadTimestamps[recipient.id]))
       ).length;
       return { ...recipient, unreadCount };
     });
@@ -93,14 +98,18 @@ function MessageChat({ excludeRole }) {
     });
 
     return filtered;
-  }, [availableRecipients, searchQuery, messages, profile?.uid, lastReadTimestamps]);
+  }, [availableRecipients, searchQuery, messages, profile?.uid, profile?.id, lastReadTimestamps]);
 
   const selectedContact = availableRecipients.find((recipient) => recipient.id === selectedRecipient);
 
   const currentChatMessages = messages.filter(
-    (message) =>
-      (message.receiverId === selectedRecipient && message.senderId === profile?.uid) ||
-      (message.senderId === selectedRecipient && message.receiverId === profile?.uid)
+    (message) => {
+      const userId = profile?.uid || profile?.id;
+      return (
+        (message.receiverId === selectedRecipient && message.senderId === userId) ||
+        (message.senderId === selectedRecipient && message.receiverId === userId)
+      );
+    }
   );
 
   useEffect(() => {
@@ -141,19 +150,6 @@ function MessageChat({ excludeRole }) {
       });
     };
   }, [attachments]);
-
-  const uploadAttachment = async (file) => {
-    const path = `messageAttachments/${profile?.uid}/${Date.now()}_${file.name}`;
-    const storageReference = storageRef(storage, path);
-    const snapshot = await uploadBytesResumable(storageReference, file);
-    const url = await getDownloadURL(snapshot.ref);
-    return {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      url,
-    };
-  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();

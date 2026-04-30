@@ -1,21 +1,16 @@
+// Module: useAccessControl
+// Purpose: Poll permissions from the REST API and expose access-check helpers.
+
 import { useState, useEffect } from 'react';
-import { doc, getFirestore, onSnapshot } from 'firebase/firestore';
-import app from '../firebase/firebaseConfig.js';
+import { api } from '../api/client.js';
 import { useAuthContext } from '../context/AuthContext.jsx';
 
-const db = getFirestore(app);
+const POLL_INTERVAL_MS = 30_000;
 
-/**
- * Custom hook to access control permissions for a user
- * Handles both permission-based access (dashboard visibility, messaging) and site-based access
- *
- * @param {string} userId - Optional: the user ID to fetch permissions for. If not provided, uses current auth user.
- * @returns {object} Access control object with permissions and helper functions
- */
 export function useAccessControl(userId) {
   const { profile } = useAuthContext();
-  const targetUserId = userId || profile?.uid;
-  
+  const targetUserId = userId || profile?.id || profile?.uid;
+
   const [permissions, setPermissions] = useState({
     canViewDashboard: true,
     canViewCharts: true,
@@ -35,92 +30,55 @@ export function useAccessControl(userId) {
       return;
     }
 
-    // Subscribe to user permissions in real-time
-    const userRef = doc(db, 'users', targetUserId);
-    const unsubscribe = onSnapshot(
-      userRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const userData = snapshot.data();
-          
-          // Permissions-based access control
-          if (userData.permissions) {
-            setPermissions({
-              canViewDashboard: userData.permissions.canViewDashboard ?? true,
-              canViewCharts: userData.permissions.canViewCharts ?? true,
-              canMessageRoles: userData.permissions.canMessageRoles ?? [],
-            });
-          }
+    let active = true;
 
-          // Site-based access control
-          const assignedSites = userData.assignedSite ? [userData.assignedSite] : [];
-          const canViewAllSites = userData.role === 'admin' || userData.role === 'project_manager';
-          const canEditDashboard = userData.role === 'admin' || userData.role === 'supervisor';
+    async function fetchPermissions() {
+      if (!active) return;
+      try {
+        const data = await api.get(`/api/users/${targetUserId}`);
 
-          setSiteAccess({
-            assignedSites,
-            canViewAllSites,
-            canEditDashboard,
+        if (data?.permissions) {
+          setPermissions({
+            canViewDashboard: data.permissions.canViewDashboard ?? true,
+            canViewCharts:    data.permissions.canViewCharts ?? true,
+            canMessageRoles:  data.permissions.canMessageRoles ?? [],
           });
         }
-        setLoading(false);
+
+        setSiteAccess({
+          assignedSites:    data?.assignedSite ? [data.assignedSite] : [],
+          canViewAllSites:  data?.role === 'admin' || data?.role === 'project_manager',
+          canEditDashboard: data?.role === 'admin' || data?.role === 'supervisor',
+        });
+
         setError(null);
-      },
-      (err) => {
+      } catch (err) {
         console.error('Error fetching permissions:', err);
         setError(err.message);
-        setLoading(false);
+      } finally {
+        if (active) setLoading(false);
       }
-    );
 
-    return unsubscribe;
+      if (active) setTimeout(fetchPermissions, POLL_INTERVAL_MS);
+    }
+
+    fetchPermissions();
+    return () => { active = false; };
   }, [targetUserId]);
 
-  /**
-   * Check if user can view dashboard
-   */
   const canViewDashboard = () => permissions.canViewDashboard === true;
+  const canViewCharts    = () => permissions.canViewCharts === true;
 
-  /**
-   * Check if user can view charts
-   */
-  const canViewCharts = () => permissions.canViewCharts === true;
+  const canMessageRole = (roleId) =>
+    Array.isArray(permissions.canMessageRoles) && permissions.canMessageRoles.includes(roleId);
 
-  /**
-   * Check if user can message a specific role
-   * @param {string} roleId - The role ID to check (e.g., 'admin', 'supervisor')
-   */
-  const canMessageRole = (roleId) => {
-    if (!Array.isArray(permissions.canMessageRoles)) {
-      return false;
-    }
-    return permissions.canMessageRoles.includes(roleId);
-  };
+  const canMessageAnyRole = (roleIds) =>
+    Array.isArray(roleIds) && roleIds.some((id) => canMessageRole(id));
 
-  /**
-   * Check if user can message any of the provided roles
-   * @param {array} roleIds - Array of role IDs to check
-   */
-  const canMessageAnyRole = (roleIds) => {
-    if (!Array.isArray(roleIds) || !Array.isArray(permissions.canMessageRoles)) {
-      return false;
-    }
-    return roleIds.some((roleId) => permissions.canMessageRoles.includes(roleId));
-  };
-
-  /**
-   * Check if user can message all of the provided roles
-   * @param {array} roleIds - Array of role IDs to check
-   */
-  const canMessageAllRoles = (roleIds) => {
-    if (!Array.isArray(roleIds) || !Array.isArray(permissions.canMessageRoles)) {
-      return false;
-    }
-    return roleIds.every((roleId) => permissions.canMessageRoles.includes(roleId));
-  };
+  const canMessageAllRoles = (roleIds) =>
+    Array.isArray(roleIds) && roleIds.every((id) => canMessageRole(id));
 
   return {
-    // Permissions-based access
     permissions,
     loading,
     error,
@@ -129,12 +87,11 @@ export function useAccessControl(userId) {
     canMessageRole,
     canMessageAnyRole,
     canMessageAllRoles,
-    
-    // Site-based access (for existing components)
-    assignedSites: siteAccess.assignedSites,
-    canViewAllSites: siteAccess.canViewAllSites,
+    assignedSites:    siteAccess.assignedSites,
+    canViewAllSites:  siteAccess.canViewAllSites,
     canEditDashboard: siteAccess.canEditDashboard,
   };
 }
 
 export default useAccessControl;
+

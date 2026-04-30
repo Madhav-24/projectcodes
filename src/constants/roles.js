@@ -1,7 +1,5 @@
-/**
- * Role Constants and Configurations
- * Centralized management of user roles and their permissions
- */
+// Module: Roles
+// Purpose: Centralize all user role identifiers, options, and route mappings.
 
 export const ROLES = {
   ADMIN: 'admin',
@@ -17,14 +15,9 @@ export const ROLE_OPTIONS = [
   { value: 'project_manager', label: 'Project Manager' },
 ];
 
-/**
- * Roles requiring site assignment
- */
+// Roles that must be assigned to a specific site on creation
 export const ROLES_REQUIRING_SITE = [ROLES.ENGINEER, ROLES.SUPERVISOR];
 
-/**
- * Role descriptions for UI display
- */
 export const ROLE_DESCRIPTIONS = {
   [ROLES.ADMIN]: 'Full system access and user management',
   [ROLES.SUPERVISOR]: 'Supervisor with assigned site access',
@@ -32,9 +25,6 @@ export const ROLE_DESCRIPTIONS = {
   [ROLES.PROJECT_MANAGER]: 'View all sites, manage messages, no settings access',
 };
 
-/**
- * Role route mappings
- */
 export const ROLE_ROUTES = {
   [ROLES.ADMIN]: '/admin/dashboard',
   [ROLES.SUPERVISOR]: '/supervisor/dashboard',

@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { collection, getFirestore, onSnapshot, query } from 'firebase/firestore';
 import { FaUsers, FaChartLine, FaExclamationTriangle, FaCoins, FaVideo, FaShieldAlt, FaClock } from 'react-icons/fa';
-import app from '../../firebase/firebaseConfig.js';
 import Sidebar from '../../components/layout/Sidebar.jsx';
 import KpiMetric from '../../components/cards/KpiMetric.jsx';
 import AIPredictiveCard from '../../components/common/AIPredictiveCard.jsx';
@@ -13,29 +11,13 @@ import SafetyLeaderboard from '../../components/common/SafetyLeaderboard.jsx';
 import SiteMap from '../../components/maps/SiteMap.jsx';
 import LayerComparisonChart from '../../components/charts/LayerComparisonChart.jsx';
 import LiveClock from '../../components/common/LiveClock.jsx';
-
-const db = getFirestore(app);
+import ThemeToggle from '../../components/common/ThemeToggle.jsx';
 
 function ProjectManagerDashboardPage() {
   const [sites, setSites] = useState([]);
   const [dashboardData, setDashboardData] = useState([]);
 
-  useEffect(() => {
-    const siteQuery = query(collection(db, 'sites'));
-    const unsubscribeSites = onSnapshot(siteQuery, (snapshot) => {
-      setSites(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const dashboardQuery = query(collection(db, 'dashboardData'));
-    const unsubscribeDashboard = onSnapshot(dashboardQuery, (snapshot) => {
-      setDashboardData(snapshot.docs.map((doc) => ({ siteId: doc.id, ...doc.data() })));
-    });
-
-    return () => {
-      unsubscribeSites();
-      unsubscribeDashboard();
-    };
-  }, []);
+  // sites and dashboardData will be fetched from the PostgreSQL backend;
 
   const totals = useMemo(() => {
     const allProgress = dashboardData.reduce((sum, item) => sum + (item.progress || 0), 0);
@@ -61,7 +43,7 @@ function ProjectManagerDashboardPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen app-bg app-text transition-colors duration-300">
       <Sidebar />
       <div className="lg:ml-72">
         <div className="px-6 py-6">
@@ -69,8 +51,11 @@ function ProjectManagerDashboardPage() {
             <div>
               <h1 className="text-3xl font-bold text-white">AI Road Construction Monitor</h1>
             </div>
-            <div className="hidden lg:block">
-              <LiveClock />
+            <div className="flex items-center gap-3">
+              <div className="hidden lg:block">
+                <LiveClock />
+              </div>
+              <ThemeToggle />
             </div>
           </div>
 

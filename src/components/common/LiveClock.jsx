@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import ThemeModeToggle from './ThemeModeToggle.jsx';
 
 function LiveClock() {
   const [time, setTime] = useState(new Date());
@@ -28,15 +27,14 @@ function LiveClock() {
   };
 
   return (
-    <div className="flex items-center gap-4 rounded-xl bg-slate-800/50 border border-slate-700 px-4 py-3 backdrop-blur">
-      <ThemeModeToggle />
+    <div className="flex items-center gap-6 rounded-xl border px-6 py-3 backdrop-blur app-surface app-border transition-colors duration-300">
       <div className="text-right">
-        <p className="text-sm font-medium text-slate-400">{formatDay(time)}</p>
-        <p className="text-sm font-semibold text-slate-200">{formatDate(time)}</p>
+        <p className="text-sm font-medium app-text-muted">{formatDay(time)}</p>
+        <p className="text-sm font-semibold app-text">{formatDate(time)}</p>
       </div>
-      <div className="h-12 w-px bg-slate-700"></div>
+      <div className="h-12 w-px app-divider"></div>
       <div className="text-center">
-        <p className="text-2xl font-bold text-white font-mono">{formatTime(time)}</p>
+        <p className="text-2xl font-bold app-text font-mono">{formatTime(time)}</p>
       </div>
     </div>
   );

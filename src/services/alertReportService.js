@@ -1,66 +1,47 @@
-const STORAGE_KEY = 'construction:safety-reports';
+// Module: Alert Report Service
+// Purpose: REST API CRUD and polling-based subscription for safety alert reports (PostgreSQL backend).
+import { api } from '../api/client.js';
 
-function readStoredReports() {
-  if (typeof window === 'undefined') {
-    return [];
-  }
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
+const POLL_INTERVAL_MS = 2_000;
 
 export function getSafetyReports() {
-  return readStoredReports();
+  return [];
 }
 
-export function createSafetyReport(reportPayload) {
-  if (typeof window === 'undefined') {
-    return null;
+export async function createSafetyReport(reportPayload, senderProfile) {
+  if (!senderProfile?.uid || !senderProfile?.role || !reportPayload?.site) {
+    throw new Error('Cannot create alert without user role and assigned site.');
   }
 
-  const report = {
-    id: reportPayload.id || `report-${Date.now()}`,
-    createdAt: reportPayload.createdAt || new Date().toISOString(),
-    senderUid: reportPayload.senderUid || null,
-    senderRole: reportPayload.senderRole,
-    senderName: reportPayload.senderName,
+  return api.post('/api/alerts', {
     site: reportPayload.site,
     problem: reportPayload.problem,
     severity: reportPayload.severity || 'Critical',
     status: reportPayload.status || 'Active',
-  };
-
-  const current = readStoredReports();
-  const updated = [report, ...current];
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-
-  window.dispatchEvent(new CustomEvent('safety-report-created', { detail: report }));
-  return report;
+    senderName: reportPayload.senderName || senderProfile.name || 'Unknown User',
+  });
 }
 
-export function subscribeToSafetyReports(onChange) {
-  if (typeof window === 'undefined') {
-    return () => {};
+// Returns an unsubscribe function — mirrors the Firebase onSnapshot contract.
+export function subscribeToSafetyReports(_viewer, onChange) {
+  let active = true;
+
+  async function poll() {
+    if (!active) return;
+    try {
+      const alerts = await api.get('/api/alerts');
+      onChange(alerts);
+    } catch (err) {
+      console.error('Failed to fetch alerts:', err);
+    }
+    if (active) setTimeout(poll, POLL_INTERVAL_MS);
   }
 
-  const handler = () => {
-    onChange(readStoredReports());
-  };
+  poll();
 
-  window.addEventListener('storage', handler);
-  window.addEventListener('safety-report-created', handler);
-
-  return () => {
-    window.removeEventListener('storage', handler);
-    window.removeEventListener('safety-report-created', handler);
+  return function unsubscribe() {
+    active = false;
   };
 }
+
+

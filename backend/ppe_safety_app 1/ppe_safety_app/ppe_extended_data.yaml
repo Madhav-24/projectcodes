@@ -1,0 +1,16 @@
+# Update these paths to your dataset locations before training.
+# Expected YOLO format:
+# - images and labels in matching train/val folders
+# - labels contain class IDs listed in names below
+
+path: /Users/saaralvarunie/Desktop/ppe_safety_app/dataset
+train: images/train
+val: images/val
+
+names:
+  0: person
+  1: helmet
+  2: vest
+  3: safety_shoes
+  4: safety_gloves
+  5: safety_harness

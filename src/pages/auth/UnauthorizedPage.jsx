@@ -1,4 +1,7 @@
-﻿import { Link } from 'react-router-dom';
+﻿// Module: Unauthorized Page
+// Purpose: Inform the user that their role does not allow access to a route.
+
+import { Link } from 'react-router-dom';
 
 export default function UnauthorizedPage() {
   return (

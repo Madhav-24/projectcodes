@@ -1,243 +1,95 @@
-import { createContext, useContext, useEffect, useState } from 'react';
-import { initializeApp, getApps } from 'firebase/app';
-import {
-  getAuth,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-  createUserWithEmailAndPassword,
-} from 'firebase/auth';
-import { doc, getDoc, getFirestore, setDoc, addDoc, collection, getDocs, query } from 'firebase/firestore';
-import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import app, { firebaseConfig } from '../firebase/firebaseConfig.js';
-import { toast } from 'react-toastify';
-import { ROLES_REQUIRING_SITE } from '../constants/roles.js';
+// Module: Auth Context
+// Purpose: Provide JWT-based auth state and user profile to the entire app (PostgreSQL backend).
 
-const auth = getAuth(app);
-const db = getFirestore(app);
-const secondaryApp = getApps().find((loaded) => loaded.name === 'Secondary') || initializeApp(firebaseConfig, 'Secondary');
-const secondaryAuth = getAuth(secondaryApp);
+import { createContext, useContext, useEffect, useState } from 'react';
+import { toast } from 'react-toastify';
+import { api, uploadForm } from '../api/client.js';
+
 const AuthContext = createContext(null);
 
+const TOKEN_KEY   = 'auth_token';
+const PROFILE_KEY = 'auth_profile';
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser]       = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // ── Restore session from localStorage on mount ───────────────
   useEffect(() => {
-    initializeAdminUser();
+    const token       = localStorage.getItem(TOKEN_KEY);
+    const savedRaw    = localStorage.getItem(PROFILE_KEY);
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (!firebaseUser) {
-        setUser(null);
-        setProfile(null);
-        setLoading(false);
-        return;
+    if (token && savedRaw) {
+      try {
+        const saved = JSON.parse(savedRaw);
+        // Expose the same shape the rest of the app expects (uid alias)
+        setUser({ uid: saved.id, email: saved.email });
+        setProfile(saved);
+      } catch {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(PROFILE_KEY);
       }
-      setUser(firebaseUser);
-      const docRef = doc(db, 'users', firebaseUser.uid);
-      const snapshot = await getDoc(docRef);
-
-      if (snapshot.exists()) {
-        const profileData = snapshot.data();
-        setProfile({ uid: firebaseUser.uid, ...profileData, role: profileData.role ? profileData.role.toLowerCase() : profileData.role });
-      }
-      setLoading(false);
-    });
-
-    return unsubscribe;
+    }
+    setLoading(false);
   }, []);
 
+  // ── Login ─────────────────────────────────────────────────────
   const login = async (identifier, password) => {
-    const isFallbackAdmin = identifier === 'admin@gmail.com' && password === 'Admin@1234';
-    if (isFallbackAdmin) {
-      const fallbackProfile = {
-        uid: 'admin-fallback',
-        name: 'Madhav',
-        email: identifier,
-        role: 'admin',
-        assignedSite: 'All Sites',
-      };
-      setUser({ uid: fallbackProfile.uid, email: fallbackProfile.email });
-      setProfile(fallbackProfile);
-      toast.success('Signed in as admin (demo mode)');
-      return fallbackProfile;
-    }
-
     try {
-      // Find user by identifier (email, employeeId, or phoneNumber)
-      const userRecord = await findUserByIdentifier(identifier);
-
-      if (!userRecord) {
-        throw new Error('User not found. Please check your credentials.');
-      }
-
-      // Use the email from the user record for Firebase Auth
-      const credential = await signInWithEmailAndPassword(auth, userRecord.email, password);
-      const docRef = doc(db, 'users', credential.user.uid);
-      const snapshot = await getDoc(docRef);
-
-      if (!snapshot.exists()) {
-        throw new Error('User profile not found');
-      }
-
-      const profileData = snapshot.data();
-      const normalizedRole = profileData.role ? profileData.role.toLowerCase() : profileData.role;
-      const finalProfile = { uid: credential.user.uid, ...profileData, role: normalizedRole };
-      setUser(credential.user);
-      setProfile(finalProfile);
+      const { token, profile: p } = await api.post('/api/auth/login', { identifier, password });
+      localStorage.setItem(TOKEN_KEY,   token);
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
+      setUser({ uid: p.id, email: p.email });
+      setProfile(p);
       toast.success('Signed in successfully');
-      return finalProfile;
+      return p;
     } catch (error) {
-      toast.error('Sign in failed. Check credentials.');
+      const msg = error.statusCode === 401
+        ? 'Wrong ID or Password'
+        : (error.message || 'Sign in failed.');
+      toast.error(msg);
       throw error;
     }
   };
 
-  const logout = async () => {
-    await signOut(auth);
+  // ── Logout ────────────────────────────────────────────────────
+  const logout = () => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(PROFILE_KEY);
     setUser(null);
     setProfile(null);
   };
 
+  // ── Register (admin creates a new user) ───────────────────────
   const registerUser = async (name, email, password, role, employeeId, phoneNumber, assignedSite) => {
-    // Normalize role to lowercase for consistency
-    const normalizedRole = role?.toLowerCase();
-
     try {
-      const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-      await signOut(secondaryAuth);
-
-      // Only assign site for roles that require it (Engineer, Supervisor)
-      // Project Manager and Admin roles do not require site assignment
-      const shouldAssignSite = ROLES_REQUIRING_SITE.includes(normalizedRole);
-
-      // Initialize default permissions for all users
-      const defaultPermissions = {
-        canViewDashboard: true,
-        canViewCharts: true,
-        canMessageRoles: ['admin', 'supervisor', 'engineer', 'project_manager'], // Default: can message all roles
-      };
-
-      const userData = {
-        uid: credential.user.uid,
-        name,
-        email,
-        role: normalizedRole,
-        employeeId,
-        phoneNumber,
-        assignedSite: shouldAssignSite ? (assignedSite || null) : null,
-        permissions: defaultPermissions,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      await setDoc(doc(db, 'users', credential.user.uid), userData);
-      toast.success(`${normalizedRole?.charAt(0).toUpperCase() + normalizedRole?.slice(1)} ${name} created successfully`);
-      return userData;
+      const newUser = await api.post('/api/auth/register', {
+        name, email, password, role, employeeId, phoneNumber, assignedSite,
+      });
+      const label = role ? role.charAt(0).toUpperCase() + role.slice(1) : 'User';
+      toast.success(`${label} ${name} created successfully`);
+      return newUser;
     } catch (error) {
       toast.error(error.message || 'Failed to create user');
       throw error;
     }
   };
 
-  const findUserByIdentifier = async (identifier) => {
-    try {
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef);
-      const snapshot = await getDocs(q);
-
-      // Find user by email, employeeId, or phoneNumber
-      const userDoc = snapshot.docs.find(doc => {
-        const data = doc.data();
-        return data.email === identifier ||
-               data.employeeId === identifier ||
-               data.phoneNumber === identifier;
-      });
-
-      if (!userDoc) {
-        return null;
-      }
-
-      return { id: userDoc.id, ...userDoc.data() };
-    } catch (error) {
-      console.error('Error finding user by identifier:', error);
-      throw error;
-    }
-  };
-
-  const initializeAdminUser = async () => {
-    const adminEmail = 'admin@gmail.com';
-    const adminPassword = 'Admin@1234';
-    const adminName = 'Madhav';
-    const adminRole = 'admin';
-
-    try {
-      const adminDocRef = doc(db, 'users', 'admin-fallback');
-      const adminDocSnapshot = await getDoc(adminDocRef);
-
-      if (!adminDocSnapshot.exists()) {
-        // Admin has full permissions by default
-        const adminPermissions = {
-          canViewDashboard: true,
-          canViewCharts: true,
-          canMessageRoles: ['admin', 'supervisor', 'engineer', 'project_manager'],
-        };
-
-        const adminData = {
-          uid: 'admin-fallback',
-          name: adminName,
-          email: adminEmail,
-          password: adminPassword,
-          role: adminRole,
-          assignedSite: 'All Sites',
-          permissions: adminPermissions,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          status: 'active',
-        };
-        await setDoc(adminDocRef, adminData);
-        console.log('Admin user initialized in Firestore');
-      }
-    } catch (error) {
-      console.error('Error initializing admin user:', error);
-    }
-  };
-
+  // ── Send a message (with optional file attachments) ──────────
   const sendMessage = async (receiverId, text, attachments = []) => {
+    if (!user?.uid || !receiverId || (!text?.trim() && attachments.length === 0)) {
+      throw new Error('Invalid message data');
+    }
     try {
-      if (!user?.uid || !receiverId || (!text.trim() && attachments.length === 0)) {
-        throw new Error('Invalid message data');
+      const formData = new FormData();
+      formData.append('receiverId', receiverId);
+      formData.append('text', text?.trim() || '');
+      for (const file of attachments) {
+        if (file) formData.append('files', file);
       }
-
-      const attachmentMetadata = [];
-      for (const attachment of attachments) {
-        if (!attachment) continue;
-        const uploadPath = `messageAttachments/${user.uid}/${Date.now()}_${attachment.name}`;
-        const storageReference = storageRef(getStorage(app), uploadPath);
-        const snapshot = await uploadBytesResumable(storageReference, attachment);
-        const url = await getDownloadURL(snapshot.ref);
-
-        attachmentMetadata.push({
-          name: attachment.name,
-          type: attachment.type,
-          size: attachment.size,
-          url,
-        });
-      }
-
-      const messageData = {
-        senderId: user.uid,
-        senderName: profile?.name || 'Unknown',
-        senderRole: profile?.role || 'user',
-        receiverId: receiverId,
-        text: text.trim(),
-        attachments: attachmentMetadata,
-        timestamp: new Date(),
-        read: false,
-      };
-
-      const docRef = await addDoc(collection(db, 'messages'), messageData);
-      return { id: docRef.id, ...messageData };
+      const message = await uploadForm('/api/messages', formData);
+      return message;
     } catch (error) {
       toast.error('Failed to send message');
       throw error;
@@ -245,17 +97,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      profile,
-      login,
-      logout,
-      registerUser,
-      initializeAdminUser,
-      sendMessage,
-      findUserByIdentifier,
-      loading
-    }}>
+    <AuthContext.Provider value={{ user, profile, login, logout, registerUser, sendMessage, loading }}>
       {children}
     </AuthContext.Provider>
   );
@@ -264,3 +106,4 @@ export function AuthProvider({ children }) {
 export function useAuthContext() {
   return useContext(AuthContext);
 }
+

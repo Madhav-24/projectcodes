@@ -1,3 +1,6 @@
+// Module: Login Page
+// Purpose: Authenticate users via email, employee ID, or phone number.
+
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaEye, FaEyeSlash, FaLock, FaUser } from 'react-icons/fa';
@@ -18,17 +21,12 @@ function LoginPage() {
 
     try {
       const authenticated = await login(identifier, password);
-      let destination = '/admin/dashboard'; // default
-      
-      if (authenticated?.role === 'admin') {
-        destination = '/admin/dashboard';
-      } else if (authenticated?.role === 'supervisor') {
-        destination = '/supervisor/dashboard';
-      } else if (authenticated?.role === 'engineer') {
-        destination = '/engineer/dashboard';
-      } else if (authenticated?.role === 'project_manager') {
-        destination = '/project-manager/dashboard';
-      }
+      const destination = {
+        admin: '/admin/dashboard',
+        supervisor: '/supervisor/dashboard',
+        engineer: '/engineer/dashboard',
+        project_manager: '/project-manager/dashboard',
+      }[authenticated?.role] || '/admin/dashboard';
       
       navigate(destination, { replace: true });
     } catch {

@@ -1,81 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   FaBell,
-  FaCamera,
   FaCheck,
   FaClock,
-  FaExclamationTriangle,
   FaMapMarkerAlt,
-  FaPaperPlane,
   FaTimes,
   FaUser,
+  FaCamera,
+  FaExclamationTriangle,
+  FaPaperPlane,
 } from 'react-icons/fa';
-import { createSafetyReport, getSafetyReports, subscribeToSafetyReports } from '../../services/alertReportService.js';
+import { createSafetyReport, subscribeToSafetyReports } from '../../services/alertReportService.js';
 import { useAuth } from '../../hooks/useAuth.jsx';
+import { toast } from 'react-toastify';
 
 const TABS = ['All', 'Active', 'Critical', 'Warning'];
-
-function getAssignedSites(profile) {
-  if (Array.isArray(profile?.assignedSites) && profile.assignedSites.length > 0) {
-    return profile.assignedSites;
-  }
-
-  if (Array.isArray(profile?.assignedSite) && profile.assignedSite.length > 0) {
-    return profile.assignedSite;
-  }
-
-  if (profile?.assignedSite) {
-    return [profile.assignedSite];
-  }
-
-  return [];
-}
-
-function canViewReport(report, roleKey, assignedSites) {
-  if (roleKey === 'admin' || roleKey === 'project_manager') {
-    return true;
-  }
-
-  if (assignedSites.length === 0) {
-    return false;
-  }
-
-  return assignedSites.includes(report.site);
-}
-
-function playNotificationSound() {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) {
-    return;
-  }
-
-  try {
-    const audioContext = new AudioContextClass();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-
-    oscillator.type = 'triangle';
-    oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
-    gainNode.gain.setValueAtTime(0.001, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.08, audioContext.currentTime + 0.02);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.32);
-
-    oscillator.onended = () => {
-      audioContext.close().catch(() => {});
-    };
-  } catch {
-    // Ignore autoplay or audio runtime failures.
-  }
-}
+const SOUND_PREF_KEY = 'construction:alert-sound-enabled';
 
 function SeverityBadge({ severity }) {
   const styles =
@@ -112,8 +52,8 @@ function toAlertRows(reports) {
       worker: report.senderName,
       camera: 'Manual Report',
       time: new Date(report.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      senderUid: report.senderUid,
       sourceRole: report.senderRole,
+      createdAtMs: report.createdAtMs || Date.now(),
     };
   });
 }
@@ -186,58 +126,63 @@ export default function SafetyAlertsBoard({ roleKey, allowGenerateReport = false
   const { profile } = useAuth();
   const [alerts, setAlerts] = useState([]);
   const [selectedTab, setSelectedTab] = useState('All');
-  const [soundOn, setSoundOn] = useState(true);
+  const [soundOn, setSoundOn] = useState(() => {
+    if (typeof window === 'undefined') {
+      return true;
+    }
+
+    const raw = window.localStorage.getItem(SOUND_PREF_KEY);
+    return raw === null ? true : raw === 'true';
+  });
   const [showReportModal, setShowReportModal] = useState(false);
   const [reporterName, setReporterName] = useState(profile?.name || '');
   const [problem, setProblem] = useState('');
   const [priority, setPriority] = useState('Critical');
-  const didHydrateRef = useRef(false);
-  const lastAlertIdRef = useRef(null);
 
-  const assignedSites = useMemo(() => getAssignedSites(profile), [profile]);
-  const assignedSite = assignedSites[0] || 'Assigned Site Not Available';
+  const assignedSite = Array.isArray(profile?.assignedSite)
+    ? profile.assignedSite[0]
+    : profile?.assignedSite || 'Assigned Site Not Available';
 
   useEffect(() => {
     if (!profile?.name) {
       return;
     }
 
-    setReporterName((previous) => previous || profile.name);
+    setReporterName((prev) => prev || profile.name);
   }, [profile?.name]);
 
   useEffect(() => {
-    const updateFromStorage = () => {
-      const reports = getSafetyReports();
-      const visibleReports = reports.filter((report) => canViewReport(report, roleKey, assignedSites));
-      setAlerts(toAlertRows(visibleReports));
+    if (!profile?.uid || !profile?.role) {
+      setAlerts([]);
+      return;
+    }
+
+    const assignedSites = Array.isArray(profile?.assignedSites)
+      ? profile.assignedSites.filter(Boolean)
+      : Array.isArray(profile?.assignedSite)
+      ? profile.assignedSite.filter(Boolean)
+      : profile?.assignedSite
+      ? [profile.assignedSite]
+      : [];
+
+    const viewer = {
+      uid: profile.uid,
+      role: profile.role,
+      assignedSites,
     };
 
-    updateFromStorage();
-    const unsubscribe = subscribeToSafetyReports(updateFromStorage);
+    const unsubscribe = subscribeToSafetyReports(viewer, (reports) => {
+      setAlerts(toAlertRows(reports));
+    });
 
     return unsubscribe;
-  }, [assignedSites, roleKey]);
+  }, [profile?.uid, profile?.role, profile?.assignedSite, profile?.assignedSites]);
 
   useEffect(() => {
-    if (alerts.length === 0) {
-      return;
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(SOUND_PREF_KEY, String(soundOn));
     }
-
-    const newestAlert = alerts[0];
-
-    if (!didHydrateRef.current) {
-      didHydrateRef.current = true;
-      lastAlertIdRef.current = newestAlert.id;
-      return;
-    }
-
-    if (newestAlert.id !== lastAlertIdRef.current) {
-      lastAlertIdRef.current = newestAlert.id;
-      if (soundOn && newestAlert.senderUid && newestAlert.senderUid !== profile?.uid) {
-        playNotificationSound();
-      }
-    }
-  }, [alerts, profile?.uid, soundOn]);
+  }, [soundOn]);
 
   const totals = useMemo(() => {
     const activeCount = alerts.filter((alert) => alert.status === 'Active').length;
@@ -263,23 +208,30 @@ export default function SafetyAlertsBoard({ roleKey, allowGenerateReport = false
   }, [alerts, selectedTab]);
 
   const handleResolve = (id) => {
-    setAlerts((previous) => previous.map((alert) => (alert.id === id ? { ...alert, status: 'Resolved' } : alert)));
+    setAlerts((prev) => prev.map((alert) => (alert.id === id ? { ...alert, status: 'Resolved' } : alert)));
   };
 
-  const handleSendReport = () => {
-    if (!problem.trim() || assignedSites.length === 0) {
+  const handleSendReport = async () => {
+    if (!problem.trim()) {
       return;
     }
 
-    createSafetyReport({
-      senderUid: profile?.uid,
-      senderRole: roleKey,
-      senderName: reporterName || profile?.name || 'Unknown User',
-      site: assignedSite,
-      problem: problem.trim(),
-      severity: priority,
-      status: 'Active',
-    });
+    try {
+      await createSafetyReport(
+        {
+          senderRole: roleKey,
+          senderName: reporterName || profile?.name || 'Unknown User',
+          site: assignedSite,
+          problem: problem.trim(),
+          severity: priority,
+          status: 'Active',
+        },
+        profile
+      );
+    } catch {
+      toast.error('Unable to send alert. Please try again.');
+      return;
+    }
 
     setProblem('');
     setPriority('Critical');
@@ -293,8 +245,7 @@ export default function SafetyAlertsBoard({ roleKey, allowGenerateReport = false
           {allowGenerateReport ? (
             <button
               onClick={() => setShowReportModal(true)}
-              disabled={assignedSites.length === 0}
-              className="rounded-xl border border-blue-500/40 bg-blue-500/15 px-4 py-2 text-sm font-semibold text-blue-300 transition hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl border border-blue-500/40 bg-blue-500/15 px-4 py-2 text-sm font-semibold text-blue-300 transition hover:bg-blue-500/25"
             >
               Generate Report
             </button>
@@ -377,7 +328,7 @@ export default function SafetyAlertsBoard({ roleKey, allowGenerateReport = false
                 </div>
                 <div>
                   <h3 className="text-2xl font-bold text-white">Alert</h3>
-                  <p className="mt-1 text-sm text-slate-400">{assignedSites.length > 0 ? assignedSite : 'Site Area'}</p>
+                  <p className="mt-1 text-sm text-slate-400">Site Area</p>
                 </div>
               </div>
 
@@ -435,8 +386,7 @@ export default function SafetyAlertsBoard({ roleKey, allowGenerateReport = false
 
                 <button
                   onClick={handleSendReport}
-                  disabled={!problem.trim() || assignedSites.length === 0}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-8 py-3 font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-8 py-3 font-semibold text-white transition hover:bg-blue-500"
                 >
                   Send
                   <FaPaperPlane className="text-sm" />

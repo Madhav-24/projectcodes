@@ -1,3 +1,6 @@
+// Module: Protected Route
+// Purpose: Redirect unauthenticated users to /login.
+
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuthContext } from '../context/AuthContext.jsx';
 

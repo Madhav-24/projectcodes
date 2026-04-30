@@ -1,10 +1,7 @@
 import { useState, useEffect } from 'react';
 import { FaChevronDown, FaChevronUp, FaSave, FaSpinner } from 'react-icons/fa';
-import { doc, updateDoc, getFirestore } from 'firebase/firestore';
-import app from '../../firebase/firebaseConfig.js';
 import { toast } from 'react-toastify';
-
-const db = getFirestore(app);
+import { updateUserPermissions } from '../../services/userService.js';
 
 function UserPermissionCard({ user, messageRoles, onUpdate, isUpdating }) {
   const [expanded, setExpanded] = useState(false);
@@ -60,17 +57,13 @@ function UserPermissionCard({ user, messageRoles, onUpdate, isUpdating }) {
     setHasChanges(true);
   };
 
-  // Save permissions to Firestore
   const handleSave = async () => {
     try {
       setSaving(true);
-      const userRef = doc(db, 'users', user.id);
-      await updateDoc(userRef, {
-        permissions: {
-          canViewDashboard: permissions.canViewDashboard,
-          canViewCharts: permissions.canViewCharts,
-          canMessageRoles: permissions.canMessageRoles,
-        },
+      await updateUserPermissions(user.id || user.uid, {
+        canViewDashboard: permissions.canViewDashboard,
+        canViewCharts: permissions.canViewCharts,
+        canMessageRoles: permissions.canMessageRoles,
       });
       setHasChanges(false);
       toast.success(`Permissions updated for ${user.name}`);

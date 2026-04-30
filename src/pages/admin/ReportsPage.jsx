@@ -1,17 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FaCalendarAlt, FaDownload, FaFileAlt } from 'react-icons/fa';
-import { collection, getFirestore, onSnapshot, orderBy, query } from 'firebase/firestore';
-import app from '../../firebase/firebaseConfig.js';
 import PageShell from '../../components/layout/PageShell.jsx';
-
-const db = getFirestore(app);
-
-function formatDate(value) {
-  if (!value) return 'Unknown';
-  if (value?.toDate) return value.toDate().toLocaleDateString();
-  return new Date(value).toLocaleDateString();
-}
-
 // Type badge color map matching the image
 const TYPE_COLORS = {
   Safety:    { bg: 'rgba(220,38,38,0.15)',   text: '#f87171', border: 'rgba(220,38,38,0.4)' },
@@ -53,20 +42,10 @@ const DEFAULT_REPORTS = [
 
 function ReportsPage() {
   const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const q = query(collection(db, 'reports'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        setReports(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-      },
-      () => setLoading(false)
-    );
-    return unsubscribe;
-  }, []);
+  // Reports will be fetched from the PostgreSQL backend in a future iteration;
+  // for now the page renders DEFAULT_REPORTS below.
 
   const firestoreRows = useMemo(
     () => reports.map((report) => ({

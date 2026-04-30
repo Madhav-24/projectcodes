@@ -1,12 +1,10 @@
-import PageShell from '../../components/layout/PageShell.jsx';
-import SafetyAlertsBoard from '../../components/alerts/SafetyAlertsBoard.jsx';
+// Module: Alerts Page
+// Purpose: Route entry point for the PPE violation alerts view.
+
+import AdminAlerts from './AdminAlerts.jsx';
 
 function AlertsPage() {
-  return (
-    <PageShell title="Safety Alerts" description="Real-time alerts across all sites">
-      <SafetyAlertsBoard roleKey="admin" allowGenerateReport={false} />
-    </PageShell>
-  );
+  return <AdminAlerts />;
 }
 
 export default AlertsPage;
