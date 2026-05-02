@@ -29,6 +29,13 @@ PERSON_TTL_SECONDS = 30
 STREAM_DELAY_SECONDS = 0.10
 
 
+def _camera_source_from_env() -> int | str:
+    raw = os.getenv("PPE_CAMERA_SOURCE", "0").strip()
+    if raw.isdigit():
+        return int(raw)
+    return raw
+
+
 def _load_local_env_file() -> None:
     """Load root .env for local runs where the PPE engine is started directly."""
     env_path = Path(__file__).resolve().parents[2] / ".env"
@@ -111,11 +118,11 @@ async def ws_camera(websocket: WebSocket) -> None:
     await websocket.accept()
 
     capture_service = WebcamCaptureService(
-        camera_index=0,
+        camera_source=_camera_source_from_env(),
         width=480,
         height=320,
         capture_fps=20,
-        queue_size=2,
+        queue_size=1,
     )
     tracker_service = PersonTrackerService(max_age_seconds=PERSON_TTL_SECONDS)
     alert_manager_service = AlertManagerService(person_ttl_seconds=PERSON_TTL_SECONDS)
