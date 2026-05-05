@@ -11,7 +11,7 @@ class Config:
         self.intrusion_detection_threshold = 0.5
         
         # Input settings
-        self.input_video_path = "data/raw/input_video.mp4"
+        self.input_video_path = "data/ppe/input_video.mp4"
         self.output_video_path = "data/processed/output_video.mp4"
         
         # Other parameters

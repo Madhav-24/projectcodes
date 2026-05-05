@@ -24,6 +24,7 @@ class IntrusionDetector:
             require_helmet: If True, helmet is required to be a Worker.
             require_vest:   If True, vest is required to be a Worker.
         """
+        # Hold detector and rule settings.
         self.ppe_detector   = ppe_detector
         self.require_helmet = require_helmet
         self.require_vest   = require_vest
@@ -46,16 +47,16 @@ class IntrusionDetector:
                 'missing_ppe': list of missing items e.g. ['Helmet']
             }
         """
-        # Step 1: Detect persons using pretrained COCO model (high recall)
+        # Step 1: Detect persons using pretrained COCO model (high recall).
         persons    = self.ppe_detector.detect_persons(frame)
-        # Step 2: Run custom PPE model for helmets, vests, and Person class 4
+        # Step 2: Run custom PPE model for helmets, vests, and Person class 4.
         detections = self.ppe_detector.detect(frame)
         ppe_items  = self.ppe_detector.get_ppe(detections)
-        # Custom model's own Person detections — used to cross-validate + supplement
+        # Custom model's own Person detections — used to cross-validate + supplement.
         custom_persons = self.ppe_detector.get_persons(detections)
 
         # Merge: add any custom-model Person detections not already covered by COCO
-        # (catches people the COCO model missed entirely)
+        # (catches people the COCO model missed entirely).
         for cp in custom_persons:
             already_covered = any(
                 self._bbox_iou(cp['bbox'], p['bbox']) >= 0.30 for p in persons
@@ -110,6 +111,7 @@ class IntrusionDetector:
           - The custom model also detects a Person (class 4) overlapping ≥ 15%, OR
           - At least one PPE item (helmet/vest) overlaps ≥ 15% of the expanded bbox.
         """
+        # Expand bbox downward to catch low vests.
         px1, py1, px2, py2 = bbox
         # Expand bbox downward by 20% of the person height to catch low vests
         expand = int((py2 - py1) * 0.20)
@@ -143,8 +145,8 @@ class IntrusionDetector:
         if not has_vest:
             missing.append('Vest')
 
-        # Worker if they have at least one PPE item
-        label = self.WORKER if (has_helmet or has_vest) else self.INTRUDER
+        # Worker only if they have BOTH helmet AND vest.
+        label = self.WORKER if (has_helmet and has_vest) else self.INTRUDER
         return label, missing
 
     # ------------------------------------------------------------------

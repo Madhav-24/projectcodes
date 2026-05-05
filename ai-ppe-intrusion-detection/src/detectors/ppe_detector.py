@@ -45,13 +45,15 @@ class PPEDetector:
             device:         'cpu' or 'cuda'.
             image_size:     Inference image size.
         """
+        # Core inference settings.
         self.conf        = conf_threshold
         self.person_conf = person_conf
         self.iou         = nms_threshold
         self.device      = device
         self.imgsz       = image_size
+        # Main PPE detection model.
         self.model       = YOLO(weights)
-        # Use a separate pretrained COCO model for robust person detection
+        # Use a separate pretrained COCO model for robust person detection.
         if person_weights == weights:
             self.person_model    = self.model
             self.use_coco_person = False
@@ -73,6 +75,7 @@ class PPEDetector:
                 'confidence': float
             }
         """
+        # PPE model inference.
         results = self.model.predict(
             source=frame,
             conf=self.conf,
@@ -82,6 +85,7 @@ class PPEDetector:
             verbose=False
         )
 
+        # Normalize model output to a list of dicts.
         detections = []
         for r in results:
             for box in r.boxes:
@@ -104,6 +108,7 @@ class PPEDetector:
         Uses a lower confidence threshold for maximum recall.
         When using COCO pretrained model, restricts to class 0 (person) only.
         """
+        # Person model inference with lower confidence for higher recall.
         predict_kwargs = dict(
             source=frame,
             conf=self.person_conf,  # lower threshold — catch more people
@@ -153,15 +158,64 @@ class PPEDetector:
 
     # HSV ranges for hard hat colours (OpenCV H: 0-180)
     HELMET_HSV_RANGES = [
-        (15,  38,  70, 255,  80, 255),   # Yellow hard hat (broadened, lower S)
-        ( 5,  18,  70, 255,  80, 255),   # Orange hard hat (broadened, lower S)
+        (15,  38,  70, 255,  80, 255),   # Yellow hard hat
+        ( 5,  18,  80, 255,  80, 255),   # Orange hard hat
         (  0,   8, 100, 255,  80, 255),  # Red hard hat (low hue)
         (165, 180, 100, 255,  80, 255),  # Red hard hat (high hue wrap)
         (100, 130,  80, 255,  80, 255),  # Blue hard hat
-        (  0, 180,   0,  50, 180, 255),  # White hard hat (low saturation, high value)
+        (  0, 180,   0,  50, 190, 255),  # White hard hat (low sat, high brightness)
     ]
-    HELMET_COLOR_MIN_RATIO = 0.10   # ≥10 % of head pixels must match
+    HELMET_COLOR_MIN_RATIO = 0.13   # slightly above original 0.10 — the white range tightening handles false positives
 
+    # Named colour ranges for role classification (matched in order)
+    HELMET_COLOR_RANGES = [
+        ('White',  [(  0, 180,   0,  50, 190, 255)]),
+        ('Yellow', [( 15,  38,  70, 255,  80, 255)]),
+        ('Orange', [(  5,  18,  80, 255,  80, 255)]),
+        ('Red',    [(  0,   8, 100, 255,  80, 255), (165, 180, 100, 255, 80, 255)]),
+        ('Blue',   [(100, 130,  80, 255,  80, 255)]),
+        ('Green',  [( 35,  85,  80, 255,  80, 255)]),
+    ]
+    HELMET_ROLE_MAP = {
+        'White':  'Site Manager',
+        'Blue':   'Site Engineer',
+        'Green':  'Road Worker',
+        'Red':    'Flagman',
+        'Orange': 'Paver Operator',
+        'Yellow': 'Road Worker',
+    }
+
+    def detect_helmet_color(self, frame: np.ndarray, person_bbox: list) -> str:
+        """
+        Detect the dominant helmet colour in the person's head region and
+        return the colour name, or 'Unknown' if none matched above threshold.
+        """
+        px1, py1, px2, py2 = person_bbox
+        h_box = py2 - py1
+        h1 = max(0, py1)
+        h2 = min(frame.shape[0], py1 + int(h_box * 0.25))
+        x1 = max(0, px1); x2 = min(frame.shape[1], px2)
+        if h2 <= h1 or x2 <= x1:
+            return 'Unknown'
+        head  = frame[h1:h2, x1:x2]
+        if head.size == 0:
+            return 'Unknown'
+        hsv   = cv2.cvtColor(head, cv2.COLOR_BGR2HSV)
+        total = max(1, head.shape[0] * head.shape[1])
+        best_color, best_ratio = 'Unknown', 0.0
+        # Score each named color range and return the best match.
+        for color_name, ranges in self.HELMET_COLOR_RANGES:
+            mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
+            for (hl, hh, smin, smax, vmin, vmax) in ranges:
+                mask |= cv2.inRange(hsv,
+                                    np.array([hl, smin, vmin], dtype=np.uint8),
+                                    np.array([hh, smax, vmax], dtype=np.uint8))
+            ratio = np.count_nonzero(mask) / total
+            if ratio > best_ratio:
+                best_ratio, best_color = ratio, color_name
+        return best_color if best_ratio >= self.HELMET_COLOR_MIN_RATIO else 'Unknown'
+
+    # ------------------------------------------------------------------
     def detect_vest_by_color(self, frame: np.ndarray, person_bbox: list) -> bool:
         """
         Check for a high-visibility vest using HSV color analysis on the
@@ -247,6 +301,7 @@ class PPEDetector:
         has_helmet = False
         has_vest   = False
 
+        # Check overlap of each PPE item with the person bbox.
         for ppe in ppe_detections:
             bx1, by1, bx2, by2 = ppe['bbox']
             # Compute intersection
@@ -265,7 +320,7 @@ class PPEDetector:
                 elif ppe['class_id'] == self.VEST_ID:
                     has_vest = True
 
-        # HSV colour fallback: if YOLO missed the vest, try colour detection
+        # HSV colour fallback: if YOLO missed the vest, try colour detection.
         vest_source = None
         if has_vest:
             vest_source = 'yolo'
@@ -273,16 +328,24 @@ class PPEDetector:
             has_vest    = True
             vest_source = 'color'
 
-        # HSV colour fallback for helmet
+        # HSV colour fallback for helmet.
         helmet_source = None
+        helmet_color  = 'Unknown'
         if has_helmet:
             helmet_source = 'yolo'
+            if frame is not None:
+                helmet_color = self.detect_helmet_color(frame, person['bbox'])
         elif frame is not None and self.detect_helmet_by_color(frame, person['bbox']):
             has_helmet    = True
             helmet_source = 'color'
+            helmet_color  = self.detect_helmet_color(frame, person['bbox'])
+
+        # Role mapping derived from helmet color.
+        role = self.HELMET_ROLE_MAP.get(helmet_color, 'Unknown') if has_helmet else 'Unknown'
 
         return {'helmet': has_helmet, 'vest': has_vest,
-                'vest_source': vest_source, 'helmet_source': helmet_source}
+                'vest_source': vest_source, 'helmet_source': helmet_source,
+                'helmet_color': helmet_color, 'role': role}
 
     # ------------------------------------------------------------------
     def draw_results(self, frame: np.ndarray, detections: list[dict]) -> np.ndarray:

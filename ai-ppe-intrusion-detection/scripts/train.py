@@ -22,7 +22,7 @@ from ultralytics import YOLO
 
 # ── Default paths ────────────────────────────────────────────────────────────
 ROOT      = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-DATA_YAML = os.path.join(ROOT, 'data', 'raw', 'data.yaml')
+DATA_YAML = os.path.join(ROOT, 'data', 'ppe', 'data.yaml')
 PROJECT   = os.path.join(ROOT, 'runs', 'detect', 'runs', 'train')
 RUN_NAME  = 'ppe_model'
 
@@ -80,7 +80,7 @@ def main():
     print(f"  Training complete!")
     print(f"  Best weights : {best_pt}")
     print(f"\n  Run inference with:")
-    print(f"  python scripts/infer.py --source data/raw/test/images \\")
+    print(f"  python scripts/infer.py --source data/ppe/test/images \\")
     print(f"      --weights \"{best_pt}\" --save --conf 0.35")
     print("=" * 60)
 

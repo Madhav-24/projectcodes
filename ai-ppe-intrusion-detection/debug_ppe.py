@@ -10,7 +10,7 @@ det = PPEDetector(
     device='0'
 )
 
-imgs = sorted(glob.glob('data/raw/test/images/*.jpg'))[:5]
+imgs = sorted(glob.glob('data/ppe/test/images/*.jpg'))[:5]
 for p in imgs:
     frame = cv2.imread(p)
     persons    = det.detect_persons(frame)

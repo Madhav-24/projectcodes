@@ -18,7 +18,7 @@ def main():
                     glob.glob(os.path.join(RESULTS_DIR, '*.png')))
     if not images:
         print(f"[ERROR] No images found in {RESULTS_DIR}")
-        print("  Run inference first:  python scripts/infer.py --source data/raw/test/images --save")
+        print("  Run inference first:  python scripts/infer.py --source data/ppe/test/images --save")
         sys.exit(1)
 
     print(f"[INFO] {len(images)} result images found.")

@@ -7,24 +7,24 @@ from datasets.loader import DataLoader
 from utils.visualization import visualize_detections
 
 def main():
-    # Load configuration
+    # Load configuration (paths, thresholds, runtime settings).
     config = Config()
 
-    # Initialize detectors
+    # Initialize detectors.
     ppe_detector = PPEDetector(config.ppe_model_path)
     intrusion_detector = IntrusionDetector(config.intrusion_model_path)
 
-    # Load data
+    # Load data source (images/video frames).
     data_loader = DataLoader(config.data_path)
 
     for frame in data_loader:
-        # Detect PPE
+        # Detect PPE on the current frame.
         ppe_detections = ppe_detector.detect(frame)
 
-        # Classify detections
+        # Classify detections into Worker/Intruder.
         intrusion_results = intrusion_detector.classify(ppe_detections)
 
-        # Visualize results
+        # Visualize results for quick inspection.
         visualize_detections(frame, ppe_detections, intrusion_results)
 
 if __name__ == "__main__":

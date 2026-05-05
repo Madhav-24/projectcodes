@@ -40,7 +40,7 @@ def draw_detections(frame: np.ndarray, results: list[dict]) -> np.ndarray:
         # Bounding box
         cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
 
-        # Top label bar
+        # Top label bar — Worker or Intruder only
         top_text = f"{label}  {conf:.2f}"
         (tw, th), _ = cv2.getTextSize(top_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
         cv2.rectangle(out, (x1, y1 - th - 8), (x1 + tw + 6, y1), color, -1)
@@ -60,6 +60,18 @@ def draw_detections(frame: np.ndarray, results: list[dict]) -> np.ndarray:
             cv2.putText(out, f"{icon} {item}", (x1, tag_y),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_tag, 2)
             tag_y += 18
+
+        # Tool bounding box
+        tool_name = r.get('tool')
+        tool_bbox = r.get('tool_bbox')
+        if tool_name and tool_bbox:
+            COLOR_TOOL = (0, 165, 255)   # orange
+            tx1, ty1, tx2, ty2 = tool_bbox
+            cv2.rectangle(out, (tx1, ty1), (tx2, ty2), COLOR_TOOL, 2)
+            (ttw, tth), _ = cv2.getTextSize(tool_name, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2)
+            cv2.rectangle(out, (tx1, ty1 - tth - 8), (tx1 + ttw + 6, ty1), COLOR_TOOL, -1)
+            cv2.putText(out, tool_name, (tx1 + 3, ty1 - 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
 
     # Frame-level stats overlay
     workers   = sum(1 for r in results if r['label'] == 'Worker')

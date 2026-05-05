@@ -24,10 +24,10 @@ detection:
     intruder_label: "Intruder"
 
 data:
-  yaml: "data/raw/data.yaml"
-  train: "data/raw/train/images"
-  valid: "data/raw/valid/images"
-  test: "data/raw/test/images"
+  yaml: "data/ppe/data.yaml"
+  train: "data/ppe/train/images"
+  valid: "data/ppe/valid/images"
+  test: "data/ppe/test/images"
   output_results: "data/processed/results"
   image_size: [640, 640]
 
